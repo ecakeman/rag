@@ -1,0 +1,13 @@
+# backend
+backend/target/
+*.class
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+
+# misc
+*.log
+.env
+.idea/
+*.iml
