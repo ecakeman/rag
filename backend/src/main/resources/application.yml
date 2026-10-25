@@ -2,13 +2,38 @@ spring:
   application:
     name: backend
   datasource:
-    url: jdbc:mysql://${DB_HOST:db}:3306/doc_qa?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=utf8
-    username: root
+    url: jdbc:postgresql://${DB_HOST:db}:5432/doc_qa
+    username: postgres
     password: ${DB_PASSWORD:root123}
-    driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: Asia/Shanghai
+  sql:
+    init:
+      mode: always
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 55MB
+
 server:
   port: 8080
+
+ai:
+  base-url: http://${AI_HOST:python}:8000
+  internal-token: ${INTERNAL_TOKEN:dev-doc-qa-internal-token}
+  ingest-timeout: 5s
+  callback-url: http://${AI_CALLBACK_HOST:app}:8080/api/internal/ingest/callback
+
+app:
+  jwt-secret: ${JWT_SECRET:dev-jwt-secret-32bytes-minimum!!}
+  jwt-ttl: 24h
+  file-dir: data/files
+  chat-history-messages: 6
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

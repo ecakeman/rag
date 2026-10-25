@@ -5,26 +5,48 @@ services:
     volumes:
       - ..:/workspaces/enterprise-doc-qa:cached
     depends_on:
-      db:
-        condition: service_healthy
+      db: {condition: service_healthy}
+      python: {condition: service_started}
+
+  python:
+    build:
+      context: ..
+      dockerfile: .devcontainer/python/Dockerfile
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://open.bigmodel.cn/api/paas/v4/}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_FAST_MODEL: ${LLM_FAST_MODEL:-glm-4-flash}
+      LLM_SYNTH_MODEL: ${LLM_SYNTH_MODEL:-glm-4.5}
+      LLM_JUDGE_MODEL: ${LLM_JUDGE_MODEL:-}
+      EMBED_MODEL: ${EMBED_MODEL:-embedding-3}
+      EMBED_DIM: ${EMBED_DIM:-1024}
+      RERANK_BASE_URL: ${RERANK_BASE_URL:-https://api.siliconflow.cn/v1}
+      RERANK_API_KEY: ${RERANK_API_KEY:-}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-doc-qa-internal-token}
+      DATABASE_URL: postgresql+psycopg://postgres:root123@db:5432/doc_qa
+    volumes:
+      - ..:/workspaces/enterprise-doc-qa:cached
+    depends_on:
+      db: {condition: service_healthy}
+    restart: unless-stopped
 
   db:
-    image: mysql:8.4
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: doc_qa
+      POSTGRES_PASSWORD: root123
+      POSTGRES_DB: doc_qa
       TZ: Asia/Shanghai
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     ports:
-      - "13306:3306"       # 宿主 3306 被 Windows 本机 MySQL 服务占用,映射 13306(容器内仍为 db:3306)
+      - "5432:5432"        # 宿主 3306 曾被占;5432 实测空闲(见 evidence/M1W1-1)
     volumes:
-      - mysql-data:/var/lib/mysql
+      - pg-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot123"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d doc_qa"]
       interval: 5s
       timeout: 3s
       retries: 30
 
 volumes:
-  mysql-data:
+  pg-data:
