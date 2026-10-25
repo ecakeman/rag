@@ -39,6 +39,7 @@ public class SseGateway {
     private String internalToken;
 
     private final HttpClient httpClient = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)  // uvicorn 不支持 h2c 升级
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 

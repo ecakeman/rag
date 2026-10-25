@@ -19,6 +19,8 @@ services:
       LLM_FAST_MODEL: ${LLM_FAST_MODEL:-glm-4-flash}
       LLM_SYNTH_MODEL: ${LLM_SYNTH_MODEL:-glm-4.5}
       LLM_JUDGE_MODEL: ${LLM_JUDGE_MODEL:-}
+      EMBED_BASE_URL: ${EMBED_BASE_URL:-}
+      EMBED_API_KEY: ${EMBED_API_KEY:-}
       EMBED_MODEL: ${EMBED_MODEL:-embedding-3}
       EMBED_DIM: ${EMBED_DIM:-1024}
       RERANK_BASE_URL: ${RERANK_BASE_URL:-https://api.siliconflow.cn/v1}

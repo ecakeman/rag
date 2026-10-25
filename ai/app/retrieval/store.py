@@ -57,4 +57,5 @@ def fetch_parents(parent_ids: list[int]) -> dict[int, Hit]:
             SELECT id, doc_id, NULL, content, section_path, page
             FROM doc_chunk WHERE id = ANY(:ids)
         """), {"ids": parent_ids}).fetchall()
-    return {r[0]: Hit(r[0], r[1], None, r[2], r[3], r[4], 0.0, "parent") for r in rows}
+    # 列序: id, doc_id, NULL(占位), content, section_path, page
+    return {r[0]: Hit(r[0], r[1], None, r[3], r[4], r[5], 0.0, "parent") for r in rows}
