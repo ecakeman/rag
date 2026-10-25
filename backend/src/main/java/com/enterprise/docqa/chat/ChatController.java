@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,6 +42,12 @@ public class ChatController {
     @GetMapping("/sessions/{id}/messages")
     public R<List<MessageDTO>> messages(@PathVariable long id) {
         return R.ok(chatService.messages(id).stream().map(MessageDTO::of).toList());
+    }
+
+    @DeleteMapping("/sessions/{id}")
+    public R<Void> deleteSession(@PathVariable long id) {
+        chatService.deleteSession(id);
+        return R.ok();
     }
 
     /** SSE 流:meta 由本端先发(SseEmitter 早期缓冲保证顺序,§5.3),其余透传 Python */

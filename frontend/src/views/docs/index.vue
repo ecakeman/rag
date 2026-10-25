@@ -97,8 +97,8 @@ async function doUpload(option: UploadRequestOptions) {
     } else {
       ElMessage.error(res.message || "上传失败");
     }
-  } catch (e) {
-    ElMessage.error("上传失败");
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || "上传失败");
   }
 }
 
@@ -106,15 +106,36 @@ async function onDelete(row: DocRow) {
   await ElMessageBox.confirm(`确认删除「${row.title}」?将同时清理其知识块`, "删除确认", {
     type: "warning"
   });
-  const res = await http.request<{ code: number; message: string }>(
-    "delete",
-    `/api/documents/${row.id}`
-  );
-  if (res.code === 0) {
-    ElMessage.success("已删除");
-    await load();
-  } else {
-    ElMessage.error(res.message || "删除失败");
+  try {
+    const res = await http.request<{ code: number; message: string }>(
+      "delete",
+      `/api/documents/${row.id}`
+    );
+    if (res.code === 0) {
+      ElMessage.success("已删除");
+      await load();
+    } else {
+      ElMessage.error(res.message || "删除失败");
+    }
+  } catch (e: any) {
+    // 409(Python 不可用)等:展示后端 message
+    ElMessage.error(e?.response?.data?.message || "删除失败");
+  }
+}
+
+async function download(row: DocRow) {
+  try {
+    const res = await http.request<Blob>("get", `/api/files/${row.id}`, {
+      responseType: "blob"
+    });
+    const url = URL.createObjectURL(res);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = row.fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e: any) {
+    ElMessage.error("下载失败(文件可能已被清理)");
   }
 }
 
@@ -164,8 +185,11 @@ onBeforeUnmount(() => pollTimer.value && window.clearInterval(pollTimer.value));
           {{ new Date(row.createdAt).toLocaleString() }}
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="80" fixed="right">
+      <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
+          <el-button v-if="row.status !== 'UPLOADED'" link type="primary" @click="download(row)">
+            下载
+          </el-button>
           <el-button link type="danger" @click="onDelete(row)">删除</el-button>
         </template>
       </el-table-column>

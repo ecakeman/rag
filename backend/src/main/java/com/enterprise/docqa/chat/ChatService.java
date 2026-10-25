@@ -51,7 +51,22 @@ public class ChatService {
         m.setSessionId(sessionId);
         m.setRole("user");
         m.setContent(content);
-        return messageRepository.save(m).getId();
+        long id = messageRepository.save(m).getId();
+        // 首条用户消息覆盖默认标题(§4.2)
+        sessionRepository.findById(sessionId).ifPresent(s -> {
+            if ("新会话".equals(s.getTitle())) {
+                String t = content.length() > 20 ? content.substring(0, 20) : content;
+                s.setTitle(t.length() > 128 ? t.substring(0, 128) : t);
+                sessionRepository.save(s);
+            }
+        });
+        return id;
+    }
+
+    public void deleteSession(long sessionId) {
+        requireSession(sessionId);
+        messageRepository.deleteAll(messageRepository.findBySessionIdOrderByIdAsc(sessionId));
+        sessionRepository.deleteById(sessionId);
     }
 
     public Long saveAssistantMessage(long sessionId, String content, String citationsJson,

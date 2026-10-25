@@ -56,6 +56,9 @@ async function doSearch() {
     } else {
       ElMessage.error(res.message || "检索失败");
     }
+  } catch (e: any) {
+    // 5032(AI 服务错误,如未配 key)/5031(不可达):展示后端 message
+    ElMessage.error(e?.response?.data?.message || "检索失败");
   } finally {
     searching.value = false;
   }

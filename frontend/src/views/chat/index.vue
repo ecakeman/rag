@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { http } from "@/utils/http";
 import { getToken } from "@/utils/auth";
@@ -81,6 +81,25 @@ async function openSession(id: number) {
   }
 }
 
+async function deleteSession(id: number) {
+  await ElMessageBox.confirm("删除该会话及其全部消息?", "删除会话", { type: "warning" });
+  try {
+    const res = await http.request<{ code: number; message: string }>(
+      "delete", `/api/chat/sessions/${id}`);
+    if (res.code === 0) {
+      sessions.value = sessions.value.filter(s => s.sessionId !== id);
+      if (currentSession.value === id) {
+        currentSession.value = null;
+        bubbles.value = [];
+      }
+    } else {
+      ElMessage.error(res.message || "删除失败");
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || "删除失败");
+  }
+}
+
 function send() {
   const text = input.value.trim();
   if (!text || sending.value) return;
@@ -157,11 +176,17 @@ onUnmounted(() => ctrl?.abort());
       <div
         v-for="s in sessions"
         :key="s.sessionId"
-        class="cursor-pointer rounded px-2 py-1.5 text-sm truncate hover:bg-gray-50"
+        class="cursor-pointer rounded px-2 py-1.5 text-sm truncate hover:bg-gray-50 flex items-center justify-between group"
         :class="{ 'bg-sky-100': currentSession === s.sessionId }"
         @click="openSession(s.sessionId)"
       >
-        {{ s.title }}
+        <span class="truncate">{{ s.title }}</span>
+        <span
+          class="shrink-0 ml-1 hidden group-hover:inline-block text-xs text-gray-400 hover:text-red-500"
+          @click.stop="deleteSession(s.sessionId)"
+        >
+          删除
+        </span>
       </div>
     </el-card>
 

@@ -67,6 +67,11 @@ const onLogin = async (formEl: FormInstance | undefined) => {
             message("登录失败", { type: "error" });
           }
         })
+        .catch((error: any) => {
+          // 后端 R 错误体在 error.response.data.message(axios reject)
+          const msg = error?.response?.data?.message || error?.message || "登录失败";
+          message(msg, { type: "error" });
+        })
         .finally(() => (loading.value = false));
     }
   });

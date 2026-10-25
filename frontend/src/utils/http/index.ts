@@ -132,6 +132,17 @@ class PureHttp {
       (error: PureHttpError) => {
         const $error = error;
         $error.isCancelRequest = Axios.isCancel($error);
+        // 全局 401:凭证失效 → 清理并回登录页(登录接口自身除外,避免循环)
+        const url = String($error?.config?.url ?? "");
+        if (
+          $error?.response?.status === 401 &&
+          !url.endsWith("/api/auth/login") &&
+          !url.includes("/refresh-token")
+        ) {
+          removeToken();
+          window.location.hash = "#/login";
+          window.location.reload();
+        }
         // 所有的响应异常 区分来源为取消请求/非取消请求
         return Promise.reject($error);
       }
