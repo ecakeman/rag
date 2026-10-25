@@ -31,7 +31,7 @@ ai:
 app:
   jwt-secret: ${JWT_SECRET:dev-jwt-secret-32bytes-minimum!!}
   jwt-ttl: 24h
-  file-dir: data/files
+  file-dir: ${APP_FILE_DIR:/workspaces/enterprise-doc-qa/data/files}
   chat-history-messages: 6
 
 springdoc:

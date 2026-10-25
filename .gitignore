@@ -13,7 +13,7 @@ ai/__pycache__/
 .venv/
 
 # data & secrets
-data/
+data/files/
 results/
 .devcontainer/.env
 
