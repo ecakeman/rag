@@ -270,19 +270,13 @@ onUnmounted(() => ctrl?.abort());
               </div>
             </div>
 
-            <!-- AI 消息：左侧头像 + 内容 -->
-            <div v-else class="flex gap-3">
+            <!-- AI 消息：内容 -->
+            <div v-else>
               <div
-                class="w-8 h-8 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold"
-              >
-                AI
-              </div>
-              <div class="flex-1 min-w-0">
-                <div
-                  v-if="b.content"
-                  class="md-body text-sm text-gray-800 leading-7 break-words"
-                  v-html="renderMarkdown(b)"
-                ></div>
+                v-if="b.content"
+                class="md-body text-sm text-gray-800 leading-7 break-words"
+                v-html="renderMarkdown(b)"
+              ></div>
                 <div v-else-if="sending" class="text-gray-400 text-sm">
                   <span class="dotting">思考中</span>
                 </div>
@@ -319,7 +313,6 @@ onUnmounted(() => ctrl?.abort());
                     </div>
                   </el-collapse-item>
                 </el-collapse>
-              </div>
             </div>
           </template>
         </div>
@@ -434,10 +427,10 @@ onUnmounted(() => ctrl?.abort());
   margin: 0 1px;
 }
 
-/* 思考过程折叠面板弱化 */
+/* 思考过程折叠面板弱化；限宽并留右侧边距，长详情换行不贴右缘 */
 .trace-collapse {
   border: none;
-  max-width: 42rem;
+  max-width: min(40rem, calc(100% - 3rem));
 }
 .trace-collapse :deep(.el-collapse-item__header) {
   height: 28px;

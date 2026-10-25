@@ -1,6 +1,8 @@
 package com.enterprise.docqa.chat;
 
 import com.enterprise.docqa.common.BizException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -42,6 +44,8 @@ public class SseGateway {
             .version(HttpClient.Version.HTTP_1_1)  // uvicorn 不支持 h2c 升级
             .connectTimeout(Duration.ofSeconds(10))
             .build();
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public SseEmitter newEmitter() {
         return new SseEmitter(120_000L);
@@ -163,55 +167,27 @@ public class SseGateway {
     }
 
     private String extractTextField(String json) {
-        // {"text":"..."} → 追加内容;仅做轻量提取,避免全文解析
-        int i = json.indexOf("\"text\":\"");
-        if (i < 0) {
+        // token 事件 {"text": "..."};Jackson 解析,兼容键值间空白与任意转义
+        try {
+            return MAPPER.readTree(json).path("text").asText("");
+        } catch (Exception e) {
             return "";
         }
-        int start = i + 8;
-        StringBuilder sb = new StringBuilder();
-        for (int j = start; j < json.length(); j++) {
-            char c = json.charAt(j);
-            if (c == '\\' && j + 1 < json.length()) {
-                char n = json.charAt(++j);
-                sb.append(switch (n) {
-                    case 'n' -> '\n';
-                    case 't' -> '\t';
-                    case 'r' -> '\r';
-                    case '"' -> '"';
-                    case '\\' -> '\\';
-                    case '/' -> '/';
-                    case 'u' -> ' '; // 罕见;token 流中按空格近似
-                    default -> n;
-                });
-            } else if (c == '"' ) {
-                break;
-            } else {
-                sb.append(c);
-            }
-        }
-        return sb.toString();
     }
 
     private String extractItemsArray(String json) {
-        int i = json.indexOf("\"items\":");
-        if (i < 0) {
+        try {
+            JsonNode items = MAPPER.readTree(json).path("items");
+            return items.isArray() && !items.isEmpty() ? items.toString() : null;
+        } catch (Exception e) {
             return null;
         }
-        int start = json.indexOf('[', i);
-        int end = json.lastIndexOf(']');
-        return (start >= 0 && end > start) ? json.substring(start, end + 1) : null;
     }
 
     private Integer extractLatency(String json) {
         try {
-            int i = json.indexOf("\"latencyMs\":");
-            if (i < 0) {
-                return null;
-            }
-            int end = json.indexOf(',', i);
-            return Integer.parseInt(json.substring(i + 12, end < 0 ? json.length() - 1 : end)
-                    .replaceAll("[^0-9]", ""));
+            JsonNode n = MAPPER.readTree(json).path("latencyMs");
+            return n.isNumber() ? n.asInt() : null;
         } catch (Exception e) {
             return null;
         }
