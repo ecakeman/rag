@@ -118,12 +118,6 @@ async function onDelete(row: DocRow) {
   }
 }
 
-function statusType(s: string) {
-  if (s === "READY") return "success";
-  if (s === "FAILED") return "danger";
-  return "info";
-}
-
 function fmtSize(n: number) {
   return n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : (n / 1024).toFixed(1) + " KB";
 }
@@ -155,12 +149,12 @@ onBeforeUnmount(() => pollTimer.value && window.clearInterval(pollTimer.value));
       <el-table-column label="大小" width="90">
         <template #default="{ row }">{{ fmtSize(row.fileSize) }}</template>
       </el-table-column>
-      <el-table-column label="状态" width="110">
+      <el-table-column label="状态" width="120">
         <template #default="{ row }">
-          <el-tag v-if="row.status === 'READY'" :type="statusType(row.status)">READY</el-tag>
-          <el-tag v-else-if="row.status === 'FAILED'" type="danger">
-            <el-tooltip :content="row.errorMsg || '处理失败'">FAILED</el-tooltip>
-          </el-tag>
+          <el-tag v-if="row.status === 'READY'" type="success">READY</el-tag>
+          <el-tooltip v-else-if="row.status === 'FAILED'" :content="row.errorMsg || '处理失败'" placement="top">
+            <el-tag type="danger">FAILED</el-tag>
+          </el-tooltip>
           <el-tag v-else type="info" effect="plain">{{ row.status }}…</el-tag>
         </template>
       </el-table-column>

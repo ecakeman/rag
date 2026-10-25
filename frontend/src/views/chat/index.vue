@@ -148,16 +148,16 @@ onUnmounted(() => ctrl?.abort());
 </script>
 
 <template>
-  <div class="flex gap-2 h-full">
+  <div class="flex gap-2 w-full" style="height: calc(100vh - 132px)">
     <!-- 会话列表 -->
-    <el-card shadow="never" class="w-52 shrink-0" body-style="padding:8px">
+    <el-card shadow="never" class="w-52 shrink-0" body-style="padding:8px;overflow-y:auto">
       <el-button type="primary" class="w-full mb-2" @click="newSession">
         新建会话
       </el-button>
       <div
         v-for="s in sessions"
         :key="s.sessionId"
-        class="cursor-pointer rounded px-2 py-1.5 text-sm truncate"
+        class="cursor-pointer rounded px-2 py-1.5 text-sm truncate hover:bg-gray-50"
         :class="{ 'bg-sky-100': currentSession === s.sessionId }"
         @click="openSession(s.sessionId)"
       >
@@ -166,7 +166,7 @@ onUnmounted(() => ctrl?.abort());
     </el-card>
 
     <!-- 主对话区 -->
-    <el-card shadow="never" class="flex-1 flex flex-col" body-style="padding:0;flex:1;display:flex">
+    <el-card shadow="never" class="flex-1 flex flex-col overflow-hidden" body-style="padding:0;flex:1;display:flex;overflow:hidden">
       <template #header>
         <div class="flex items-center justify-between">
           <span class="font-bold">AI 知识问答</span>
