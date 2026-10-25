@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import ingest, search
+from app.api import chat, ingest, search
 from app.db import init_db
 from app.retrieval import bm25
 
@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="enterprise-doc-qa AI service", lifespan=lifespan)
 app.include_router(ingest.router)
 app.include_router(search.router)
+app.include_router(chat.router)
 
 
 @app.get("/health")

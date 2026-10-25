@@ -127,6 +127,43 @@ class LlmService:
                     time.sleep(2 ** attempt)
         raise last  # type: ignore[misc]
 
+    # ---- 流式调用(synthesize 用,§8.3) ----
+    def stream(self, messages: list[dict], *, node: str, prompt_id: str | None = None,
+               session_id: int | None = None, message_id: int | None = None):
+        """yield 文本增量;整次调用结束写一行 llm_call。"""
+        t0 = time.monotonic()
+        parts: list[str] = []
+        in_tokens = out_tokens = None
+        try:
+            client = self._get_client()
+            stream = client.stream(messages) if hasattr(client, "stream") else None
+            if stream is None:  # 客户端不支持流式 → 退化为整段
+                content = self.call(messages, node=node, prompt_id=prompt_id,
+                                    session_id=session_id, message_id=message_id)
+                yield content
+                return
+            for chunk in stream:
+                delta = chunk.content if hasattr(chunk, "content") else str(chunk)
+                if delta:
+                    parts.append(delta)
+                    yield delta
+                usage = (getattr(chunk, "response_metadata", {}) or {}).get("token_usage") or {}
+                if usage.get("completion_tokens"):
+                    in_tokens = usage.get("prompt_tokens")
+                    out_tokens = usage.get("completion_tokens")
+            write_llm_call(node=node, model=self.model, session_id=session_id,
+                           message_id=message_id, prompt_id=prompt_id,
+                           prompt_pack=settings.prompt_pack,
+                           input_tokens=in_tokens, output_tokens=out_tokens,
+                           latency_ms=int((time.monotonic() - t0) * 1000), status="ok")
+        except Exception as e:  # noqa: BLE001
+            write_llm_call(node=node, model=self.model, session_id=session_id,
+                           message_id=message_id, prompt_id=prompt_id,
+                           prompt_pack=settings.prompt_pack,
+                           latency_ms=int((time.monotonic() - t0) * 1000),
+                           status="error", error_snippet=str(e)[:200])
+            raise
+
     # ---- 结构化输出(§11.3) ----
     def complete_json(self, prompt_id: str, variables: dict, node: str,
                       fallback: Callable[[], T], *,
