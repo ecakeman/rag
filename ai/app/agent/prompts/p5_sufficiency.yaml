@@ -1,0 +1,11 @@
+id: P5
+name: sufficiency
+version: 1
+roles:
+  user: |
+    判断【已收集的相关片段】是否足以完整回答【问题】。若不足,指出缺什么(将用于生成下一跳检索词)。
+    【问题】
+    <question>{question}</question>
+    【已收集片段摘要】
+    {hits_summary}
+    仅输出 JSON: {{"verdict":"ENOUGH|NEED_MORE","missing":"缺少的信息,ENOUGH时为空串"}}

@@ -1,0 +1,12 @@
+id: P2
+name: router
+version: 1
+roles:
+  user: |
+    你是企业知识库问答系统的问题路由器。判断问题类型:
+    SIMPLE=单一事实/条款查询,一次检索即可回答(例:年假有几天?)
+    COMPLEX=需跨文档综合/多步推理/比较(例:工作满3年与满5年的年假差几天?报销流程和审批人是谁?)
+    CHITCHAT=问候闲聊,与企业知识无关
+    【问题】
+    <question>{question}</question>
+    仅输出 JSON: {{"type":"SIMPLE|COMPLEX|CHITCHAT","reason":"一句话"}}

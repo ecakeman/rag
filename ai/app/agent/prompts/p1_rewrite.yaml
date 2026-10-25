@@ -1,0 +1,11 @@
+id: P1
+name: rewrite
+version: 1
+roles:
+  user: |
+    你是查询改写器。根据【对话历史】把【当前问题】改写为不依赖上下文、可独立检索的完整问题。
+    【对话历史】
+    {history}
+    【当前问题】
+    <question>{question}</question>
+    仅输出 JSON: {{"query": "改写后的问题"}}

@@ -1,0 +1,12 @@
+id: P4
+name: grade
+version: 1
+roles:
+  user: |
+    你是检索片段相关性评分器。对每个【片段】相对【问题】打分:
+    0-2无关;3-5弱相关;6-8相关可作依据;9-10直接命中。
+    【问题】
+    <question>{question}</question>
+    【片段】
+    {chunks_block}
+    仅输出 JSON: {{"items":[{{"id":片段编号,"score":0-10整数}}]}}

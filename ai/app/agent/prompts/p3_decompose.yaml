@@ -1,0 +1,9 @@
+id: P3
+name: decompose
+version: 1
+roles:
+  user: |
+    把【问题】拆成至多3个可独立检索的子问题,按求解顺序排列。只拆真正需要多次检索的问题。
+    【问题】
+    <question>{question}</question>
+    仅输出 JSON: {{"subQuestions": ["...", "..."]}}

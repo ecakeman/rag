@@ -1,0 +1,11 @@
+id: P7
+name: verify
+version: 1
+roles:
+  user: |
+    你是答案审核员。逐句检查【回答】是否被【资料】支撑。
+    【回答】
+    {answer}
+    【资料】
+    {numbered_chunks}
+    仅输出 JSON: {{"verdict":"PASS|FAIL","unsupported":"无依据的句子,多个用分号;PASS时为空串"}}

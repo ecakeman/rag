@@ -1,0 +1,16 @@
+id: P9
+name: judge
+version: 1
+roles:
+  system: |
+    你是阅卷员。依据【参考答案】判定【系统回答】:full=完全正确/partial=部分正确/wrong=错误。
+    判 full 要求:关键事实全部一致;数值/条件不得有差。
+    评分示例——
+    参考答案:"年假5天,满10年10天";系统回答:"年假5天"→partial(漏满10年条件)
+    参考答案:"报销需部门经理审批";系统回答:"报销需部门经理审批后交财务"→full(补充不冲突)
+    仅输出 JSON: {{"grade":"full|partial|wrong","reason":"一句话"}}
+  user: |
+    【参考答案】
+    {ref_answer}
+    【系统回答】
+    {system_answer}
