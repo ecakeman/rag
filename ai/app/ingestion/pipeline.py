@@ -45,19 +45,28 @@ def _write_chunks(doc_id: int, chunks: list[Chunk], vectors: list[list[float]]) 
 
         child_count = 0
         vec_iter = iter(vectors)
+        children_meta: list[tuple] = []
         for c in chunks:
             if c.is_parent:
                 continue
             vec = next(vec_iter)
             vec_literal = "[" + ",".join(f"{x:.6f}" for x in vec) + "]"
-            conn.execute(text("""
+            row = conn.execute(text("""
                 INSERT INTO doc_chunk (doc_id, parent_id, is_parent, content, embedding,
                                        section_path, page, token_count)
-                VALUES (:doc, :pid, false, :content, :vec, :sp, :page, :tc)
+                VALUES (:doc, :pid, false, :content, CAST(:vec AS vector), :sp, :page, :tc)
+                RETURNING id
             """), {"doc": doc_id, "pid": parent_ids.get(c.parent_index),
                    "content": c.content, "vec": vec_literal,
-                   "sp": c.section_path, "page": c.page, "tc": c.token_count})
+                   "sp": c.section_path, "page": c.page, "tc": c.token_count}).fetchone()
+            children_meta.append((row[0], doc_id, parent_ids.get(c.parent_index),
+                                  c.content, c.section_path, c.page))
             child_count += 1
+    # BM25 增量维护(§8.4 粗粒度锁)
+    from app.retrieval import bm25
+    bm25.remove_doc(doc_id)
+    for cm in children_meta:
+        bm25.add_chunk(*cm)
     return child_count
 
 
@@ -100,4 +109,6 @@ def ingest_status(doc_id: int) -> dict:
 def delete_doc_chunks(doc_id: int) -> None:
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM doc_chunk WHERE doc_id=:d"), {"d": doc_id})
+    from app.retrieval import bm25
+    bm25.remove_doc(doc_id)
     _INGEST_STATE.pop(doc_id, None)
