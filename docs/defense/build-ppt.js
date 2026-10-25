@@ -19,7 +19,7 @@ const bu = () => ({ code: "25B8", indent: 12 });
 
 let p = new pptxgen();
 p.layout = "LAYOUT_WIDE";
-p.author = "答辩人";
+p.author = "张一凡";
 p.title = "企业内部文档智能检索系统 开题答辩";
 
 function pageChrome(s, no, title, sub) {
@@ -45,7 +45,7 @@ function arrowText(s, x, y, w, size) {
   s.addText("企业内部文档智能检索系统", { x: 0, y: 2.15, w: W, h: 0.95, fontSize: 44, bold: true, color: "FFFFFF", fontFace: F, align: "center", margin: 0 });
   s.addText("—— 基于 AI 问答知识库的设计与实现（SpringBoot + Vue）", { x: 0, y: 3.18, w: W, h: 0.5, fontSize: 17, color: "B6C2D9", fontFace: F, align: "center", margin: 0 });
   s.addText([
-    { text: "汇报人：〔姓名〕", options: { breakLine: true } },
+    { text: "汇报人：张一凡", options: { breakLine: true } },
     { text: "2026 年 11 月 7 日", options: {} }
   ], { x: 0, y: 5.55, w: W, h: 0.85, fontSize: 14, color: "8FA1BF", fontFace: F, align: "center", paraSpaceAfter: 6, margin: 0 });
   s.addNotes("开场:各位老师好,题目介绍。30秒内进入背景。");
@@ -75,30 +75,10 @@ function arrowText(s, x, y, w, size) {
   s.addNotes("三个痛点:分散/低效/无依据。落到目标一句话。约1.5分钟。");
 }
 
-/* ── S3 系统定位 ── */
-{
-  const s = p.addSlide();
-  pageChrome(s, 3, "系统定位", "一句话说清系统是什么");
-  s.addText("把企业文档，变成有依据的知识服务", { x: M, y: 2.0, w: W - 2 * M, h: 1.0, fontSize: 38, bold: true, color: NAVY, fontFace: F, align: "center", margin: 0 });
-  const vals = [
-    ["统一管理", "文档集中上传、状态跟踪、联动删除，台账与知识库一致"],
-    ["读得懂语义", "「报销流程」与「费用怎么报」能匹配同一段内容"],
-    ["回答带出处", "每个答案标注引用编号，点开即可核对制度原文"]
-  ];
-  vals.forEach((v, i) => {
-    const x = M + i * 4.28;
-    card(s, x, 3.6, 3.94, 2.2, "FFFFFF");
-    s.addShape(p.shapes.OVAL, { x: x + 0.32, y: 3.92, w: 0.42, h: 0.42, fill: { color: ACCENT } });
-    s.addText(v[0], { x: x + 0.95, y: 3.9, w: 2.8, h: 0.5, fontSize: 17, bold: true, color: NAVY, fontFace: F, margin: 0 });
-    s.addText(v[1], { x: x + 0.32, y: 4.55, w: 3.34, h: 1.1, fontSize: 13, color: MUTED, fontFace: F, lineSpacingMultiple: 1.25, margin: 0 });
-  });
-  s.addNotes("定位一句话+三个价值点,过渡到功能图。约1分钟。");
-}
-
 /* ── S4 系统功能图 ── */
 {
   const s = p.addSlide();
-  pageChrome(s, 4, "系统功能图", "六大业务模块 · 31 项功能 · 一条业务主线贯穿");
+  pageChrome(s, 3, "系统功能图", "六大业务模块 · 31 项功能 · 一条业务主线贯穿");
   const iw = 11.9, ih = iw / (1600 / 826);
   s.addImage({ path: "assets/系统功能图.png", x: (W - iw) / 2, y: 1.28, w: iw, h: ih });
   s.addNotes("答辩主图:按模块从左到右讲全貌,先讲顶部业务主线,再逐模块点名功能,重点抛出问答是核心。约2分钟。");
@@ -107,7 +87,7 @@ function arrowText(s, x, y, w, size) {
 /* ── S5 业务总链路 ── */
 {
   const s = p.addSlide();
-  pageChrome(s, 5, "业务总链路：五大业务环环相扣", "每个业务的产出，是下一个业务的原料");
+  pageChrome(s, 4, "业务总链路：五大业务环环相扣", "每个业务的产出，是下一个业务的原料");
   const steps = ["文档登记", "知识加工", "知识查找", "知识问答", "多轮会话"];
   const bw = 2.06, gap = 0.42;
   steps.forEach((t, i) => {
@@ -140,7 +120,7 @@ function arrowText(s, x, y, w, size) {
 /* ── S6 模块① 文档管理 ── */
 {
   const s = p.addSlide();
-  pageChrome(s, 6, "模块① 文档管理 —— 业务链起点", "定义：企业文档进入系统的唯一入口与台账");
+  pageChrome(s, 5, "模块① 文档管理 —— 业务链起点", "定义：企业文档进入系统的唯一入口与台账");
   card(s, M, 1.6, 5.4, 3.0, "FFFFFF");
   s.addText("五项功能", { x: M + 0.3, y: 1.82, w: 3.0, h: 0.4, fontSize: 15, bold: true, color: NAVY, fontFace: F, margin: 0 });
   s.addText([
@@ -173,7 +153,7 @@ function arrowText(s, x, y, w, size) {
 /* ── S7 模块② 知识库构建 ── */
 {
   const s = p.addSlide();
-  pageChrome(s, 7, "模块② 知识库构建 —— 自动加工厂", "定义：把「人读的文档」加工成「系统能用的知识」");
+  pageChrome(s, 6, "模块② 知识库构建 —— 自动加工厂", "定义：把「人读的文档」加工成「系统能用的知识」");
   const steps = [
     ["格式统一", "md/docx/pdf 统一为内部标准格式"],
     ["双层分块", "粗块留上下文，细块做精准匹配；查时细块定位、看粗块全文"],
@@ -199,7 +179,7 @@ function arrowText(s, x, y, w, size) {
 /* ── S8 模块③ 智能检索 ── */
 {
   const s = p.addSlide();
-  pageChrome(s, 8, "模块③ 智能检索 —— 快速通道", "定义：按查询意图，把最相关的知识段落排队找出");
+  pageChrome(s, 7, "模块③ 智能检索 —— 快速通道", "定义：按查询意图，把最相关的知识段落排队找出");
   card(s, M, 1.7, 5.5, 1.05, "FFFFFF");
   s.addText("语义检索 · 理解意思", { x: M, y: 1.7, w: 5.5, h: 1.05, fontSize: 15, bold: true, color: NAVY, fontFace: F, align: "center", valign: "middle", margin: 0 });
   card(s, M, 3.0, 5.5, 1.05, "FFFFFF");
@@ -226,7 +206,7 @@ function arrowText(s, x, y, w, size) {
 /* ── S9 模块④ AI问答·七步流程 ── */
 {
   const s = p.addSlide();
-  pageChrome(s, 9, "模块④ AI 知识问答（核心）—— 七步流程", "定义：像懂制度的同事一样作答，每句话都有出处");
+  pageChrome(s, 8, "模块④ AI 知识问答（核心）—— 七步流程", "定义：像懂制度的同事一样作答，每句话都有出处");
   const steps = [
     ["理解", "口语问题整理为清晰表达"],
     ["分流", "判断简单 / 复杂问题"],
@@ -255,39 +235,10 @@ function arrowText(s, x, y, w, size) {
   s.addNotes("核心页,放慢:七步流程+拒答底线+经理补贴例子。约2.5分钟。");
 }
 
-/* ── S10 问答配套 + 系统管理 ── */
-{
-  const s = p.addSlide();
-  pageChrome(s, 10, "问答配套体验 与 系统管理", "让回答「可信、可查、可持续」");
-  const trio = [
-    ["多轮会话", "连续追问不断上下文，会话可管理、可删除"],
-    ["引用溯源", "点击答案中的编号，直接打开制度原文段落核对"],
-    ["思考过程可视化", "每一步判断可展开查看，回答过程透明"]
-  ];
-  trio.forEach((t, i) => {
-    const y = 1.65 + i * 1.55;
-    card(s, M, y, 6.2, 1.35, "FFFFFF");
-    s.addShape(p.shapes.OVAL, { x: M + 0.3, y: y + 0.44, w: 0.46, h: 0.46, fill: { color: NAVY } });
-    s.addText(t[0], { x: M + 1.0, y: y + 0.18, w: 4.9, h: 0.45, fontSize: 15.5, bold: true, color: NAVY, fontFace: F, margin: 0 });
-    s.addText(t[1], { x: M + 1.0, y: y + 0.65, w: 5.0, h: 0.6, fontSize: 12.5, color: MUTED, fontFace: F, margin: 0 });
-  });
-  card(s, 7.15, 1.65, 5.68, 4.45, TINT);
-  s.addText("系统管理 · 运行保障", { x: 7.5, y: 1.95, w: 5.0, h: 0.45, fontSize: 16, bold: true, color: NAVY, fontFace: F, margin: 0 });
-  s.addText([
-    { text: "模型服务可视化配置（LLM / 向量 / 重排）", options: { bullet: bu(), breakLine: true } },
-    { text: "配置免重启：保存后十几秒内生效", options: { bullet: bu(), breakLine: true } },
-    { text: "服务健康监测", options: { bullet: bu(), breakLine: true } },
-    { text: "调用日志观测，出问题可回查", options: { bullet: bu() } }
-  ], { x: 7.5, y: 2.55, w: 5.0, h: 2.2, fontSize: 13.5, color: TEXT, fontFace: F, paraSpaceAfter: 12, margin: 0 });
-  s.addText("价值：换模型供应商不需要停机改配置，演示与运维成本最低化",
-    { x: 7.5, y: 5.15, w: 5.0, h: 0.7, fontSize: 12, color: MUTED, fontFace: F, lineSpacingMultiple: 1.2, margin: 0 });
-  s.addNotes("会话/溯源/可视化三个配套+系统管理。约1分钟。");
-}
-
 /* ── S11 系统演示 ── */
 {
   const s = p.addSlide();
-  pageChrome(s, 11, "系统演示（已全部实现并联调通过）", "演示路径：上传 → 状态就绪 → 问答 → 引用溯源 → 检索");
+  pageChrome(s, 9, "系统演示（已全部实现并联调通过）", "演示路径：上传 → 状态就绪 → 问答 → 引用溯源 → 检索");
   const iw = 8.35, ih = iw / (1600 / 900);
   s.addImage({ path: "assets/演示-问答页.png", x: M, y: 1.5, w: iw, h: ih });
   card(s, 9.15, 1.5, 3.68, 4.7, "FFFFFF");
@@ -305,7 +256,7 @@ function arrowText(s, x, y, w, size) {
 /* ── S12 后续规划 ── */
 {
   const s = p.addSlide();
-  pageChrome(s, 12, "后续规划", "开题之后，系统继续完善的方向");
+  pageChrome(s, 10, "后续规划", "开题之后，系统继续完善的方向");
   const plans = [
     ["权限细化", "按部门隔离文档与知识范围"],
     ["文档版本管理", "制度更新后新旧版本可追溯"],
