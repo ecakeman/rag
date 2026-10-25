@@ -2,8 +2,23 @@ services:
   app:
     image: mcr.microsoft.com/devcontainers/java:21
     command: sleep infinity
+    # 模型连接信息与 python 服务保持同源:系统设置页展示"环境变量默认值"用(只读)
+    environment:
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://open.bigmodel.cn/api/paas/v4/}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_FAST_MODEL: ${LLM_FAST_MODEL:-glm-4-flash}
+      LLM_SYNTH_MODEL: ${LLM_SYNTH_MODEL:-glm-4.5}
+      EMBED_BASE_URL: ${EMBED_BASE_URL:-}
+      EMBED_API_KEY: ${EMBED_API_KEY:-}
+      EMBED_MODEL: ${EMBED_MODEL:-embedding-3}
+      RERANK_BASE_URL: ${RERANK_BASE_URL:-https://api.siliconflow.cn/v1}
+      RERANK_API_KEY: ${RERANK_API_KEY:-}
+    ports:
+      - "5173:5173"        # 直接发布,取代旧 socat 转发容器(fwd*),WSL2 自动转发到 Windows localhost
+      - "8080:8080"
     volumes:
       - ..:/workspaces/enterprise-doc-qa:cached
+      - m2-cache:/root/.m2 # Maven 依赖缓存:容器重建不再重新下载
     depends_on:
       db: {condition: service_healthy}
       python: {condition: service_started}
@@ -52,3 +67,4 @@ services:
 
 volumes:
   pg-data:
+  m2-cache:

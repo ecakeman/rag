@@ -373,7 +373,7 @@ onUnmounted(() => ctrl?.abort());
 
 <style scoped>
 .chat-page {
-  height: calc(100vh - 98px);
+  height: calc(100vh - 84px); /* 顶部导航 48px + 内容区上边距 */
 }
 
 /* markdown 正文排版 */

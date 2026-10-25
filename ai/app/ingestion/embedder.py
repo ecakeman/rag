@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from app.config import settings
 from app.observe.llm_log import write_llm_call
+from app.runtime_config import cfg
 
 EmbedFn = Callable[[list[str]], list[list[float]]]
 
@@ -15,9 +16,11 @@ def _openai_embed_fn() -> EmbedFn:
     from llama_index.embeddings.openai import OpenAIEmbedding
 
     embed = OpenAIEmbedding(
-        model_name=settings.embed_model,  # model_name kwarg 绕过 llama-index 的 OpenAI 模型白名单校验
-        api_key=settings.effective_embed_api_key,
-        api_base=settings.effective_embed_base_url,
+        # model_name kwarg 绕过 llama-index 的 OpenAI 模型白名单校验;
+        # 连接信息优先级: DB embed 覆盖 > DB llm 覆盖 > 环境变量(空=沿用 llm 配置)
+        model_name=cfg("embed.model", settings.embed_model),
+        api_key=cfg("embed.api_key") or cfg("llm.api_key") or settings.effective_embed_api_key,
+        api_base=cfg("embed.base_url") or cfg("llm.base_url") or settings.effective_embed_base_url,
         dimensions=settings.embed_dim,
         embed_batch_size=settings.embed_batch,
     )

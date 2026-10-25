@@ -62,10 +62,12 @@ class LlmService:
             else:
                 from langchain_openai import ChatOpenAI
 
+                from app.runtime_config import cfg
+
                 self._client = ChatOpenAI(
                     model=self.model,
-                    api_key=settings.llm_api_key,
-                    base_url=settings.llm_base_url,
+                    api_key=cfg("llm.api_key", settings.llm_api_key),
+                    base_url=cfg("llm.base_url", settings.llm_base_url),
                     temperature=self.temperature,
                     timeout=self.timeout,
                     max_retries=0,  # 重试由本类统一管理
@@ -188,24 +190,50 @@ class LlmService:
         return fallback(), True
 
 
-# ---- 服务实例(进程单例,§8.4) ----
+# ---- 服务实例(进程单例,§8.4;配置覆盖变化时自动重建,系统设置页免重启生效) ----
+from app.runtime_config import overrides as _runtime_overrides
+
+_LLM_KEYS = ("llm.base_url", "llm.api_key", "llm.fast_model", "llm.synth_model")
+
+
+def _llm_version() -> int:
+    o = _runtime_overrides()
+    return hash(tuple(o.get(k, "") for k in _LLM_KEYS))
+
+
+def _fast_model() -> str:
+    from app.runtime_config import cfg
+    return cfg("llm.fast_model", settings.llm_fast_model)
+
+
+def _synth_model() -> str:
+    from app.runtime_config import cfg
+    return cfg("llm.synth_model", settings.llm_synth_model)
+
+
 def fast_llm() -> LlmService:
-    global _FAST
-    if _FAST is None:
-        _FAST = LlmService(model=settings.llm_fast_model,
+    global _FAST, _FAST_VER
+    ver = _llm_version()
+    if _FAST is None or _FAST_VER != ver:
+        _FAST = LlmService(model=_fast_model(),
                            temperature=settings.temperature_fast,
                            timeout=settings.llm_timeout_fast)
+        _FAST_VER = ver
     return _FAST
 
 
 def synth_llm() -> LlmService:
-    global _SYNTH
-    if _SYNTH is None:
-        _SYNTH = LlmService(model=settings.llm_synth_model,
+    global _SYNTH, _SYNTH_VER
+    ver = _llm_version()
+    if _SYNTH is None or _SYNTH_VER != ver:
+        _SYNTH = LlmService(model=_synth_model(),
                             temperature=settings.temperature_synth,
                             timeout=settings.llm_timeout_synth)
+        _SYNTH_VER = ver
     return _SYNTH
 
 
 _FAST: LlmService | None = None
 _SYNTH: LlmService | None = None
+_FAST_VER: int | None = None
+_SYNTH_VER: int | None = None

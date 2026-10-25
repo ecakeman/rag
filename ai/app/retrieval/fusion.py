@@ -7,6 +7,7 @@ import time
 import httpx
 
 from app.config import settings
+from app.runtime_config import cfg
 from app.observe.llm_log import write_llm_call
 from app.retrieval.store import Hit
 
@@ -63,13 +64,13 @@ def rerank(query: str, hits: list[Hit], *, top_n: int | None = None,
                         hits[i].content, hits[i].section_path, hits[i].page,
                         round(float(s), 4), "rerank")
                     for i, s in sorted(seen.items(), key=lambda kv: kv[1], reverse=True)]
-        write_llm_call(node="rerank", model=settings.rerank_model,
+        write_llm_call(node="rerank", model=cfg("rerank.model", settings.rerank_model),
                        prompt_pack=settings.prompt_pack,
                        latency_ms=int((time.monotonic() - t0) * 1000), status="ok")
         return reranked[:n], False
     except Exception as e:  # noqa: BLE001
         log.warning("[rerank] 降级为 RRF 序: %s", e)
-        write_llm_call(node="rerank", model=settings.rerank_model,
+        write_llm_call(node="rerank", model=cfg("rerank.model", settings.rerank_model),
                        prompt_pack=settings.prompt_pack,
                        latency_ms=int((time.monotonic() - t0) * 1000),
                        status="degraded", error_snippet=str(e)[:200])
@@ -77,10 +78,10 @@ def rerank(query: str, hits: list[Hit], *, top_n: int | None = None,
 
 
 def _default_post(query: str, docs: list[str]) -> list[tuple[int, float]]:
-    payload = {"model": settings.rerank_model, "query": query, "documents": docs}
-    headers = {"Authorization": f"Bearer {settings.rerank_api_key}"}
+    payload = {"model": cfg("rerank.model", settings.rerank_model), "query": query, "documents": docs}
+    headers = {"Authorization": f"Bearer {cfg('rerank.api_key', settings.rerank_api_key)}"}
     with httpx.Client(timeout=settings.rerank_timeout) as client:
-        resp = client.post(f"{settings.rerank_base_url}/rerank", json=payload, headers=headers)
+        resp = client.post(f"{cfg('rerank.base_url', settings.rerank_base_url)}/rerank", json=payload, headers=headers)
         resp.raise_for_status()
         data = resp.json()
     return [(r["index"], r["relevance_score"]) for r in data["results"]]

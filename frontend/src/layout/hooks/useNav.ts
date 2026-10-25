@@ -88,10 +88,6 @@ export function useNav() {
     router.push(getTopMenu()?.path);
   }
 
-  function onPanel() {
-    emitter.emit("openPanel");
-  }
-
   function toggleSideBar() {
     pureApp.toggleSideBar();
   }
@@ -139,7 +135,6 @@ export function useNav() {
     ExitFullscreen,
     toggle,
     backTopMenu,
-    onPanel,
     getDivStyle,
     changeTitle,
     toggleSideBar,

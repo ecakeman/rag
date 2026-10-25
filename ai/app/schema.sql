@@ -31,3 +31,10 @@ CREATE TABLE IF NOT EXISTS llm_call (
 );
 CREATE INDEX IF NOT EXISTS idx_llm_call_msg ON llm_call(message_id);
 CREATE INDEX IF NOT EXISTS idx_llm_call_ts  ON llm_call(ts);
+
+-- 系统设置页的运行时配置覆盖(DESIGN §13)
+CREATE TABLE IF NOT EXISTS system_config (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

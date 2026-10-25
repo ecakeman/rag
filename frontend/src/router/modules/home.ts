@@ -42,6 +42,15 @@ export default {
         title: "智能检索",
         icon: "ep/search"
       }
+    },
+    {
+      path: "/settings",
+      name: "Settings",
+      component: () => import("@/views/settings/index.vue"),
+      meta: {
+        title: "系统设置",
+        icon: "ep/setting"
+      }
     }
   ]
 } satisfies RouteConfigsTable;

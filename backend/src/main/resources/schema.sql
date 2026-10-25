@@ -7,6 +7,12 @@ CREATE TABLE IF NOT EXISTS sys_user (
   updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS system_config (
+  "key"      VARCHAR(64)  NOT NULL PRIMARY KEY,
+  value      TEXT         NOT NULL,
+  updated_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS document (
   id          BIGSERIAL PRIMARY KEY,
   title       VARCHAR(256) NOT NULL,
