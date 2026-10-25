@@ -12,8 +12,6 @@ const {
   logout,
   pureApp,
   username,
-  userAvatar,
-  avatarsStyle,
   toggleSideBar
 } = useNav();
 </script>
@@ -35,10 +33,9 @@ const {
     <LayNavMix v-if="layout === 'mix'" />
 
     <div v-if="layout === 'vertical'" class="vertical-header-right">
-      <!-- 用户头像 -->
+      <!-- 用户名(不显示头像) -->
       <el-dropdown trigger="click">
         <span class="el-dropdown-link navbar-bg-hover select-none">
-          <img :src="userAvatar" :style="avatarsStyle" />
           <p v-if="username" class="dark:text-white">{{ username }}</p>
         </span>
         <template #dropdown>

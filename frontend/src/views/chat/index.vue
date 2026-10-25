@@ -243,7 +243,7 @@ onUnmounted(() => ctrl?.abort());
     <!-- 对话主区 -->
     <section class="flex-1 min-w-0 flex flex-col bg-white">
       <header
-        class="h-12 shrink-0 flex items-center justify-between px-5 border-b border-gray-100"
+        class="h-12 shrink-0 flex items-center gap-4 px-5 border-b border-gray-100"
       >
         <span class="font-semibold text-gray-800">AI 知识问答</span>
         <div class="flex items-center gap-2">
@@ -255,10 +255,12 @@ onUnmounted(() => ctrl?.abort());
       <!-- 消息区 -->
       <main ref="listEl" class="flex-1 overflow-y-auto px-6 py-5">
         <div class="max-w-3xl mx-auto space-y-6">
-          <el-empty
-            v-if="!bubbles.length"
-            description="新建会话后开始提问，回答将附引用出处"
-          />
+        <div
+          v-if="!bubbles.length"
+          class="h-full flex items-center justify-center text-sm text-gray-400"
+        >
+          新建会话后开始提问，回答将附引用出处
+        </div>
 
           <template v-for="(b, i) in bubbles" :key="i">
             <!-- 用户消息：右侧气泡 -->
