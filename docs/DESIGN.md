@@ -1017,3 +1017,4 @@ user：
 | 2026-10-25 | v1.0 | 首版定稿 |
 | 2026-10-25 | v1.1 | 补齐资产管理四类设计：prompt yaml 化/PROMPT_PACK/双层结构化输出/上下文预算与裁剪/thread 每轮独立/断连取消/llm_call 观测表/注入缓解/重试矩阵；同步修正 v1.0 复查问题（grade 改批量打分、ENABLE_AGENT=False 路径明确为无历史单轮、PDF 页码表述、凭据表补 JWT_SECRET、/chat 契约补 messageId） |
 | 2026-10-25 | v1.2 | 模型接入层去厂商锁定：全部改 OpenAI 兼容 env 配置（LLM_*/EMBED_*/RERANK_*），DDL 维度模板化（__EMBED_DIM__ 占位），json_object 兼容性探测，新增 GET /health；配套新增 docs/ACCEPTANCE.md 施工验收与证据清单 |
+| 2026-10-25 | v1.2.1(实施注记) | 主要落地偏差与经验:①子块切分用确定性字符滑窗替代 SentenceSplitter(免 tiktoken 依赖,参数仍在 config 统一调) ②psycopg 向量参数需 CAST(::vector) ③rank_bm25 负 IDF 分不应过滤 ④SSE 需放行 DispatcherType.ASYNC ⑤llama-index OpenAIEmbedding 用 model_name kwarg 绕模型白名单 ⑥前端强制 pnpm(vue-demi 需显式 devDep) ⑦运维: devcontainer/tmp/dev-up.sh 一键拉起(WSL 抖动会杀容器内手动进程,UNC 写入不触发 uvicorn 热重载需重启 python 容器) ⑧checkpointer 未接入运行(保留为 M4 答辩演示项) |
