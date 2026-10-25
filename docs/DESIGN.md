@@ -62,7 +62,7 @@ SpringBoot 系统壳 (:8080)                FastAPI AI 服务 (:8000, 服务名 
   ├─ 文档台账+状态机+文件落盘               ├─ /search   混合检索
   ├─ 会话/消息 CRUD                       ├─ /chat     SSE 问答(LangGraph)
   ├─ SSE 透传网关                          │    ├─ LlamaIndex: 解析/切分/检索管道
-  ├─ 对 Python 的 HTTP 调用+对账           │    ├─ LangChain: 智谱/重排客户端
+  ├─ 对 Python 的 HTTP 调用+对账           │    ├─ LangChain: LLM/重排客户端(OpenAI兼容,env换厂商)
   └─ /internal/ingest/callback 接回调      │    └─ LangGraph: agent 编排
         │        │                                 │
         ▼        ▼                                 ▼
@@ -129,17 +129,17 @@ enterprise-doc-qa/
 | 后端追加依赖 | spring-boot-starter-security、jjwt 0.12.x、springdoc-openapi-starter-webmvc-ui 2.8.x、postgresql 驱动 | — |
 | AI 服务 | Python 3.12 + FastAPI + uvicorn | — |
 | 摄入/检索管道 | llama-index-core（MarkdownNodeParser、SentenceSplitter、QueryFusionRetriever、自定义 BaseRetriever） | ≥0.12 |
-| 模型交互 | langchain-openai（ChatOpenAI 指向智谱兼容端点） | ≥0.3 |
+| 模型交互 | langchain-openai（ChatOpenAI 指向 OpenAI 兼容端点，默认智谱、env 可换） | ≥0.3 |
 | 编排 | langgraph + langgraph-checkpoint-postgres | ≥0.4 |
 | 存储 | PostgreSQL 16 + pgvector（镜像 pgvector/pgvector:pg16，本机已缓存） | pgvector ≥0.7 |
 | 向量 SQL | **手写 SQL**（psycopg + SQLAlchemy core），不用 LlamaIndex PGVectorStore（为承载父子块自建 schema，见 §7.3） | — |
 | 中文分词/BM25 | jieba + llama-index BM25Retriever（rank_bm25 内核） | — |
 | 文档转 Markdown | PDF→pymupdf4llm（page_chunks 模式，保留页码）；DOCX→mammoth(convert_to_markdown)；MD/TXT 直读 | — |
-| LLM(智谱) | glm-4-flash（路由/改写/评分/分解/校验）；生成用 GLM-4 系列主力（实施时以智谱控制台在售最新为准，记入 config 的 `SYNTH_MODEL`，默认填 `glm-4.5`，可一键改） | — |
-| Embedding | 智谱 embedding-3，**dimensions=1024**（OpenAI 兼容端点） | — |
-| 结构化输出 | 智谱 `response_format={"type":"json_object"}`（JSON 模式）+ pydantic 字段校验双层（§11.3） | — |
+| LLM 接入 | **任意 OpenAI 兼容厂商**，env 一键切换（默认智谱：fast=`glm-4-flash`、synth=`glm-4.5`；模型接入见 §7.1） | — |
+| Embedding | **任意 OpenAI 兼容 embedding API**（默认智谱 `embedding-3`）；维度 `EMBED_DIM` 可配（默认 1024），DDL 按 §4.3 模板占位 | — |
+| 结构化输出 | OpenAI 标准 `response_format={"type":"json_object"}`（兼容厂商通用；不支持时自动摘除该参数，§11.3）+ pydantic 字段校验双层 | — |
 | Rerank | SiliconFlow `BAAI/bge-reranker-v2-m3`（POST /v1/rerank）；**失败自动降级为 RRF 顺序** | — |
-| 端点 | 智谱兼容端点 `https://open.bigmodel.cn/api/paas/v4/`；SiliconFlow `https://api.siliconflow.cn/v1` | — |
+| 端点（默认） | LLM/Embedding：智谱 `https://open.bigmodel.cn/api/paas/v4/`；Rerank：SiliconFlow `https://api.siliconflow.cn/v1`；**全部 env 可换** | — |
 | Prompt 资产管理 | prompts/*.yaml + git 版本化 + PROMPT_PACK 指纹溯源（§11.2） | — |
 | LLM 观测/成本 | 自建 `llm_call` 表（§4.3、§8.4），不用 LangSmith 等外置平台 | — |
 
@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS doc_chunk (
   parent_id    BIGINT,                             -- 父块id;父块自身为NULL
   is_parent    BOOLEAN      NOT NULL DEFAULT false,
   content      TEXT         NOT NULL,
-  embedding    vector(1024),                       -- 仅子块非空;父块为NULL(不参与索引)
+  embedding    vector(__EMBED_DIM__),              -- 启动时按 config.EMBED_DIM 替换占位后执行;仅子块非空
   section_path VARCHAR(512),                       -- "员工手册 > 假期 > 年假"
   page         INT,
   token_count  INT,
@@ -300,6 +300,7 @@ POST /ingest            {docId, filePath, fileName, title, callbackUrl}   → 20
 GET  /ingest/{docId}/status                                            → {docId, status, chunkCount, errorMsg}
 DELETE /ingest/{docId}                                                 → 204
 POST /search            {query, docIds?, topK?}                         → {items:[SearchItem]}
+GET  /health                                                     → {status:"ok"}
 POST /chat              {sessionId, messageId, message,
                          history:[{role,content}]≤6条}
                         Accept: text/event-stream → SSE 流(§5.3)
@@ -413,7 +414,13 @@ TOP_K_PER_LEG=8; FUSION_TOP_K=10; RERANK_TOP_N=5; RRF_K=60
 BM25_INIT_ON_STARTUP=True  # 启动时全量重建BM25,增量在ingest后更新
 # agent
 GRADE_THRESHOLD=6; MAX_HOPS=3; TEMPERATURE_FAST=0.1; TEMPERATURE_SYNTH=0.3
-FAST_MODEL="glm-4-flash"; SYNTH_MODEL="glm-4.5"   # SYNTH 实施时按控制台在售主力改
+# 模型接入(全 OpenAI 兼容;换厂商零代码改动,只改 env;默认智谱)
+# 文中"Flash/Fast 类"即 LLM_FAST_MODEL 角色
+LLM_BASE_URL=env("https://open.bigmodel.cn/api/paas/v4/")
+LLM_API_KEY=env(); LLM_FAST_MODEL=env("glm-4-flash"); LLM_SYNTH_MODEL=env("glm-4.5")
+LLM_JUDGE_MODEL=env(默认=LLM_SYNTH_MODEL)   # 建议有条件时换厂商当评委,降低自偏
+EMBED_BASE_URL=env(默认=LLM_BASE_URL); EMBED_API_KEY=env(默认=LLM_API_KEY)
+EMBED_MODEL=env("embedding-3"); EMBED_DIM=env(1024)   # 换模型先查维度,变化→按模板重建DDL+全库重嵌
 # prompt 资产
 PROMPT_DIR="app/agent/prompts"
 PROMPT_PACK=<启动时对 prompts 目录全部文件内容 sha1 取前8位, 自动生成只读>
@@ -428,7 +435,7 @@ RERANK_TIMEOUT=5            # 超时/失败→降级用RRF顺序,不报错
 EMBED_DIM=1024
 # 消融开关(§12)
 ENABLE_HYBRID=True; ENABLE_MULTIQUERY=True; ENABLE_RERANK=True; ENABLE_AGENT=True
-# 端点/密钥 从环境变量: ZHIPU_API_KEY, SILICONFLOW_API_KEY, INTERNAL_TOKEN,
+# 密钥从环境变量: LLM_API_KEY, RERANK_API_KEY, (可选 EMBED_API_KEY), INTERNAL_TOKEN,
 #   DATABASE_URL=postgresql+psycopg://postgres:root123@db:5432/doc_qa
 ```
 
@@ -628,8 +635,14 @@ services:
     build: ./python
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
-      ZHIPU_API_KEY: ${ZHIPU_API_KEY}
-      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://open.bigmodel.cn/api/paas/v4/}
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_FAST_MODEL: ${LLM_FAST_MODEL:-glm-4-flash}
+      LLM_SYNTH_MODEL: ${LLM_SYNTH_MODEL:-glm-4.5}
+      EMBED_MODEL: ${EMBED_MODEL:-embedding-3}
+      EMBED_DIM: ${EMBED_DIM:-1024}
+      RERANK_BASE_URL: ${RERANK_BASE_URL:-https://api.siliconflow.cn/v1}
+      RERANK_API_KEY: ${RERANK_API_KEY}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-doc-qa-internal-token}
       DATABASE_URL: postgresql+psycopg://postgres:root123@db:5432/doc_qa
     volumes:
@@ -709,7 +722,7 @@ pyyaml>=6.0
 | 种子账号 | admin / admin123 |
 | 内部 token | dev 环境统一 `dev-doc-qa-internal-token`（env `INTERNAL_TOKEN`） |
 | JWT 密钥 | dev 默认 `dev-jwt-secret-32bytes-minimum!!`（env `JWT_SECRET`，≥32 字节） |
-| API 密钥 | ZHIPU_API_KEY、SILICONFLOW_API_KEY 放 `.devcontainer/.env`（git 忽略，模板 `.env.example` 提交） |
+| API 密钥 | `LLM_API_KEY`、`RERANK_API_KEY`（可选 `EMBED_API_KEY`、`LLM_JUDGE_MODEL`）放 `.devcontainer/.env`（git 忽略，`.env.example` 提交）；**换厂商只改 .env** |
 
 ### 10.5 运维备忘（本机已知坑）
 
@@ -725,12 +738,12 @@ pyyaml>=6.0
 
 | 用途 | 模型 | 温度 | 结构化输出 | 备注 |
 |---|---|---|---|---|
-| rewrite/router/decompose/grade/sufficiency/verify | glm-4-flash | 0.1 | json_object+pydantic | 便宜+快 |
-| multiquery 变体生成 | glm-4-flash | 0.1 | 无（LlamaIndex 内部） | 记 llm_call |
-| synthesize | SYNTH_MODEL(默认 glm-4.5) | 0.3 | 无（自由文本流式） | 实施时锁定在售主力 |
-| embedding | embedding-3 | — | — | dimensions=1024 |
+| rewrite/router/decompose/grade/sufficiency/verify | LLM_FAST_MODEL(默认 glm-4-flash) | 0.1 | json_object+pydantic | 便宜+快 |
+| multiquery 变体生成 | LLM_FAST_MODEL | 0.1 | 无（LlamaIndex 内部） | 记 llm_call |
+| synthesize | LLM_SYNTH_MODEL(默认 glm-4.5) | 0.3 | 无（自由文本流式） | 换厂商改 env |
+| embedding | EMBED_MODEL(默认 embedding-3) | — | — | dimensions=EMBED_DIM(默认 1024) |
 | rerank | bge-reranker-v2-m3(SiliconFlow) | — | — | 失败降级 RRF |
-| LLM-judge(评测) | SYNTH_MODEL | 0.0 | pydantic | 独立会话,≠生成实例 |
+| LLM-judge(评测) | LLM_JUDGE_MODEL(默认=SYNTH;建议换厂商) | 0.0 | pydantic | 独立会话,≠生成实例 |
 
 ### 11.2 Prompt 资产管理
 
@@ -764,7 +777,7 @@ roles:
 
 ### 11.3 结构化输出（双层校验，定稿）
 
-1. **API 层**：Flash 类节点开启智谱 JSON 模式 `response_format={"type":"json_object"}`（官方支持，提示词内仍须描述 JSON 结构——正文已含）；synthesize/verify 中 verify 也开。JSON 模式只保证语法合法。
+1. **API 层**：结构化节点开启 OpenAI 标准 JSON 模式 `response_format={"type":"json_object"}`（智谱/DeepSeek/Moonshot 等兼容厂商均支持；提示词内仍须描述 JSON 结构——正文已含）。**兼容性探测**：首次调用若厂商对该参数返回 400，自动去掉 response_format 重发一次并记 llm_call status=degraded，本次进程内后续调用不再携带。JSON 模式只保证语法合法。
 2. **应用层**：每个节点一个 pydantic 模型，`json.loads` 后 `model_validate`：
 
 | 节点 | pydantic 模型（字段） | 解析/校验失败降级 |
@@ -935,6 +948,8 @@ user：
 
 ## 13. 里程碑与任务分解
 
+> 每个工作包的检验命令、通过标准与证据产物要求见 **docs/ACCEPTANCE.md**（配套验收清单，施工时逐包过关归档证据）。
+
 | # | 周 | 任务 | 验收标准 |
 |---|---|---|---|
 | M1 | W1(11.3前) | D5 环境变更(§10)：换PG、加python服务、pom/yml 切换 | compose up 三服务 healthy；psql 连通；/ping 200 |
@@ -963,7 +978,7 @@ user：
 
 | 风险 | 对策（已内建） |
 |---|---|
-| 智谱兼容端点不支持 embedding dimensions=1024 | 实施第一步先 curl 验证；不支持→全库改 2048，只动 EMBED_DIM 与 DDL，代码不变 |
+| 所选厂商 embedding 不支持目标维度 | 实施第一步先 curl 验证（默认智谱 embedding-3@1024）；不支持→改 EMBED_DIM、按 §4.3 模板重建 DDL 并全库重嵌，代码不变 |
 | SiliconFlow 欠费/不可达 | rerank 5s 超时自动降级 RRF 序（§7.3） |
 | agent 循环空转 | MAX_HOPS=3 + 连续零新增终止（§8.2） |
 | Flash JSON 输出不稳定 | json_object 模式+剥围栏+重试1次+节点级降级默认值（§11.3） |
@@ -993,6 +1008,7 @@ user：
 | 14 | json_object+pydantic 双层结构化输出 | 仅提示词约定 JSON | 语法 API 保证、字段 schema 校验、失败有降级 |
 | 15 | 自建 llm_call 表做观测/成本 | LangSmith/Phoenix；控制台导出 | 零外部依赖；评测可直接 SQL 聚合 |
 | 16 | 断连即取消，不落库不后台续跑 | 后台续跑/deep-agent 模式 | 毕设无此需求；语义最简最稳 |
+| 17 | 模型接入层全 OpenAI 兼容化（env 换厂商） | 绑死智谱 SDK/专有参数 | 换厂商零代码改动；论文可写"模型层可插拔" |
 
 ### 14.3 变更记录
 
@@ -1000,3 +1016,4 @@ user：
 |---|---|---|
 | 2026-10-25 | v1.0 | 首版定稿 |
 | 2026-10-25 | v1.1 | 补齐资产管理四类设计：prompt yaml 化/PROMPT_PACK/双层结构化输出/上下文预算与裁剪/thread 每轮独立/断连取消/llm_call 观测表/注入缓解/重试矩阵；同步修正 v1.0 复查问题（grade 改批量打分、ENABLE_AGENT=False 路径明确为无历史单轮、PDF 页码表述、凭据表补 JWT_SECRET、/chat 契约补 messageId） |
+| 2026-10-25 | v1.2 | 模型接入层去厂商锁定：全部改 OpenAI 兼容 env 配置（LLM_*/EMBED_*/RERANK_*），DDL 维度模板化（__EMBED_DIM__ 占位），json_object 兼容性探测，新增 GET /health；配套新增 docs/ACCEPTANCE.md 施工验收与证据清单 |
