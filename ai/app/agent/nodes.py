@@ -168,6 +168,15 @@ def synthesize_node(state: AgentState, emit=None) -> dict:
     from app.retrieval.store import Hit
     hit_objs = [Hit(h["chunkId"], h["docId"], h["parentId"], h["content"],
                     h["sectionPath"], h["page"], h.get("score", 0), "rrf") for h in hits]
+    # 注入缓解(§11.4.3):资料命中注入模式 → trace warning(不中断)
+    if emit:
+        from app.agent.injection import scan_injection
+        for h in hit_objs[: settings.ctx_budget_chunks]:
+            found = scan_injection(h.content)
+            if found:
+                emit("trace", {"node": "security", "status": "end",
+                               "detail": f"injection-warning: {found}", "tsMs": 0})
+                break
     numbered, citations = build_context(hit_objs)
     messages = prompt_assets.render("P6", numbered_chunks=numbered,
                                     question=state["standalone_query"])

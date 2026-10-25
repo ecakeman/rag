@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@microsoft/fetch-event-source':
+        specifier: ^2.0.1
+        version: 2.0.1
       '@pureadmin/descriptions':
         specifier: ^1.2.1
         version: 1.2.1(echarts@6.0.0)(element-plus@2.11.5(vue@3.5.22(typescript@5.9.3)))(typescript@5.9.3)
@@ -923,6 +926,9 @@ packages:
 
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
+
+  '@microsoft/fetch-event-source@2.0.1':
+    resolution: {integrity: sha512-W6CLUJ2eBMw3Rec70qrsEW0jOm/3twwJv21mrmj2yORiaVmVYGS4sSS5yUwvQc1ZlDLYGPnClVWmUUMagKNsfA==}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -2061,6 +2067,7 @@ packages:
   eslint@9.38.0:
     resolution: {integrity: sha512-t5aPOpmtJcZcz5UJyY2GbvpDlsK5E8JqRqoKtfiKE3cNh437KIqfJr3A3AKf5k64NPx6d0G3dno6XDY05PqPtw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -4469,6 +4476,8 @@ snapshots:
       keyv: 5.5.3
 
   '@keyv/serialize@1.1.1': {}
+
+  '@microsoft/fetch-event-source@2.0.1': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
