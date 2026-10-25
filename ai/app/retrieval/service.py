@@ -7,31 +7,26 @@ from app.retrieval import bm25, fusion
 from app.retrieval.store import Hit, fetch_parents, vector_search
 
 
-def hybrid_search(query: str, *, doc_ids: list[int] | None = None,
-                  top_k: int | None = None, embed_fn=None) -> list[Hit]:
-    """返回重排后的 top 子块(含父块 id);供 /search 与 agent retrieve 工具共用。"""
-    # 1. 多查询扩展(关闭消融时单查询)
+def retrieve_fused(query: str, *, doc_ids: list[int] | None = None,
+                   embed_fn=None) -> list[Hit]:
+    """双腿召回 + RRF 融合(不含重排)——供 agent 图的 retrieve/rerank 分节点使用(§8.2)。"""
     queries = fusion.multi_query_expand(query)
-
-    # 2. 双腿召回
     vec_leg: list[Hit] = []
-    if embed_fn is None:
-        embeddings = embed_texts(queries)  # 每个变体一组向量
-    else:
-        embeddings = embed_fn(queries)
+    embeddings = (embed_fn or embed_texts)(queries)
     for vec in embeddings:
         vec_leg.extend(vector_search(vec, doc_ids=doc_ids))
-    # 多变体去重(保留首见)
     seen: set[int] = set()
     vec_leg = [h for h in vec_leg if not (h.chunk_id in seen or seen.add(h.chunk_id))]
-
     if settings.enable_hybrid:
         bm25_leg = bm25.search(query, doc_ids=doc_ids)
-        fused = fusion.rrf_fuse([vec_leg, bm25_leg])
-    else:
-        fused = sorted(vec_leg, key=lambda h: h.score, reverse=True)[: settings.fusion_top_k]
+        return fusion.rrf_fuse([vec_leg, bm25_leg])
+    return sorted(vec_leg, key=lambda h: h.score, reverse=True)[: settings.fusion_top_k]
 
-    # 3. 重排(失败降级)
+
+def hybrid_search(query: str, *, doc_ids: list[int] | None = None,
+                  top_k: int | None = None, embed_fn=None) -> list[Hit]:
+    """返回重排后的 top 子块(含父块 id);供 /search 与 A0 直连路径共用。"""
+    fused = retrieve_fused(query, doc_ids=doc_ids, embed_fn=embed_fn)
     ranked, _degraded = fusion.rerank(query, fused)
     return ranked
 

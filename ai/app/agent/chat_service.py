@@ -97,10 +97,19 @@ def run_a0_chat(*, message: str, session_id: int | None, message_id: int | None,
 async def stream_chat(payload: dict) -> AsyncIterator[str]:
     """FastAPI StreamingResponse 主体:按消融开关选择路径(§8.2)。"""
     if settings.enable_agent:
-        # M3W5: LangGraph 路径接入后替换此处
-        agen = run_a0_chat(message=payload["message"], session_id=payload.get("sessionId"),
-                           message_id=payload.get("messageId"))
-        for chunk in agen:
+        from app.agent.graph import run_agent
+        events: list[str] = []
+
+        def emit(event: str, data: dict) -> None:
+            events.append(_emit_format(event, data))
+
+        try:
+            run_agent(payload, emit)
+        except Exception as e:  # noqa: BLE001
+            log.error("[chat] agent 失败", exc_info=True)
+            events.append(_emit_format("error", {"code": 5032,
+                                                 "message": f"AI 服务内部错误: {e}"[:200]}))
+        for chunk in events:
             yield chunk
         return
     for chunk in run_a0_chat(message=payload["message"], session_id=payload.get("sessionId"),
