@@ -22,3 +22,4 @@ results/
 .env
 .idea/
 *.iml
+docs/defense/qa/

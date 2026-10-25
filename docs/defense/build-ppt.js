@@ -78,7 +78,7 @@ function arrowText(s, x, y, w, size) {
 /* ── S4 系统功能图 ── */
 {
   const s = p.addSlide();
-  pageChrome(s, 3, "系统功能图", "六大业务模块 · 31 项功能 · 一条业务主线贯穿");
+  pageChrome(s, 3, "系统功能图", "六大业务模块 · 35 项功能 · 一条业务主线贯穿");
   const iw = 11.9, ih = iw / (1600 / 826);
   s.addImage({ path: "assets/系统功能图.png", x: (W - iw) / 2, y: 1.28, w: iw, h: ih });
   s.addNotes("答辩主图:按模块从左到右讲全貌,先讲顶部业务主线,再逐模块点名功能,重点抛出问答是核心。约2分钟。");
@@ -273,7 +273,7 @@ function arrowText(s, x, y, w, size) {
   card(s, M, 5.6, W - 2 * M, 0.95, TINT);
   s.addText([
     { text: "当前进度  ", options: { bold: true, color: NAVY } },
-    { text: "六大模块 · 31 项功能已全部实现并联调通过，可现场演示", options: { color: TEXT } }
+    { text: "六大模块 · 35 项功能已全部实现并联调通过，可现场演示", options: { color: TEXT } }
   ], { x: M + 0.35, y: 5.6, w: W - 2 * M - 0.7, h: 0.95, fontSize: 15, fontFace: F, valign: "middle", margin: 0 });
   s.addNotes("四项规划+当前进度声明。约1分钟。");
 }
