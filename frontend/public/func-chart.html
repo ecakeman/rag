@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: #fff;
+    width: 1600px;
+    padding: 36px 40px 30px;
+  }
+  .title-bar { text-align: center; margin-bottom: 6px; }
+  .title-bar h1 { font-size: 34px; color: #1e293b; letter-spacing: 2px; }
+  .title-bar p { font-size: 15px; color: #64748b; margin-top: 6px; letter-spacing: 1px; }
+
+  /* 业务主链条 */
+  .chain {
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; margin: 18px 0 22px;
+  }
+  .chain .step {
+    padding: 8px 22px; border-radius: 20px; font-size: 16px; font-weight: 600;
+    color: #fff; white-space: nowrap;
+  }
+  .chain .arrow { font-size: 20px; color: #94a3b8; font-weight: bold; }
+
+  /* 六大模块 */
+  .modules { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; align-items: stretch; }
+  .mod { border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+  .mod-head {
+    padding: 12px 10px; text-align: center; font-size: 17px; font-weight: 700;
+    color: #fff; letter-spacing: 1px;
+  }
+  .mod-head small { display: block; font-size: 11px; font-weight: 400; opacity: .85; margin-top: 2px; }
+  .mod-body { flex: 1; background: #f8fafc; border: 1px solid #e2e8f0; border-top: none;
+    border-radius: 0 0 12px 12px; padding: 10px 8px; display: flex; flex-direction: column; gap: 7px; }
+  .fn {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 7px 8px; font-size: 13.5px; color: #334155; text-align: center;
+    line-height: 1.35; box-shadow: 0 1px 2px rgba(15,23,42,.04);
+  }
+  .fn.hl { border-color: currentColor; font-weight: 600; }
+
+  c1 { background: #475569; } c2 { background: #2563eb; } c3 { background: #7c3aed; }
+  c4 { background: #0891b2; } c5 { background: #d97706; } c6 { background: #059669; }
+
+  .foot { margin-top: 18px; display: flex; gap: 24px; justify-content: center;
+    font-size: 13px; color: #64748b; }
+  .foot span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+  <div class="title-bar">
+    <h1>企业内部文档智能检索系统 · 系统功能图</h1>
+    <p>六大业务模块 · 31 项功能</p>
+  </div>
+
+  <div class="chain">
+    <div class="step" style="background:#2563eb">文档登记</div><div class="arrow">→</div>
+    <div class="step" style="background:#7c3aed">知识加工</div><div class="arrow">→</div>
+    <div class="step" style="background:#0891b2">知识查找</div><div class="arrow">→</div>
+    <div class="step" style="background:#d97706">知识问答</div><div class="arrow">→</div>
+    <div class="step" style="background:#475569">多轮会话</div>
+    <div class="step" style="background:#059669;margin-left:26px">运行保障（贯穿全局）</div>
+  </div>
+
+  <div class="modules">
+    <div class="mod">
+      <div class="mod-head" style="background:#475569">1 用户与权限<small>入口把关</small></div>
+      <div class="mod-body">
+        <div class="fn">账号登录认证</div>
+        <div class="fn">角色权限控制</div>
+        <div class="fn">访问令牌管理</div>
+      </div>
+    </div>
+
+    <div class="mod">
+      <div class="mod-head" style="background:#2563eb">2 文档管理<small>业务链起点</small></div>
+      <div class="mod-body">
+        <div class="fn">多格式上传<br>md / docx / pdf</div>
+        <div class="fn">处理状态跟踪<br>待处理→处理中→就绪/失败</div>
+        <div class="fn">文档下载</div>
+        <div class="fn">文档删除<br>联动清理知识库</div>
+        <div class="fn">知识块统计</div>
+      </div>
+    </div>
+
+    <div class="mod">
+      <div class="mod-head" style="background:#7c3aed">3 知识库构建<small>自动加工</small></div>
+      <div class="mod-body">
+        <div class="fn">格式统一转换</div>
+        <div class="fn">父子双层分块</div>
+        <div class="fn">语义向量化</div>
+        <div class="fn">知识入库与索引</div>
+        <div class="fn">失败自动对账恢复</div>
+      </div>
+    </div>
+
+    <div class="mod">
+      <div class="mod-head" style="background:#0891b2">4 智能检索<small>快速通道</small></div>
+      <div class="mod-body">
+        <div class="fn">语义检索</div>
+        <div class="fn">关键词检索</div>
+        <div class="fn">双路融合排序</div>
+        <div class="fn">精准重排</div>
+        <div class="fn">按文档范围过滤</div>
+        <div class="fn">原文高亮定位</div>
+      </div>
+    </div>
+
+    <div class="mod">
+      <div class="mod-head" style="background:#d97706">5 AI 知识问答<small>核心业务</small></div>
+      <div class="mod-body">
+        <div class="fn hl" style="color:#d97706">问题理解与重写</div>
+        <div class="fn hl" style="color:#d97706">简单/复杂问题分流</div>
+        <div class="fn hl" style="color:#d97706">复杂问题分解</div>
+        <div class="fn hl" style="color:#d97706">知识检索与评估</div>
+        <div class="fn hl" style="color:#d97706">依据不足补充检索</div>
+        <div class="fn hl" style="color:#d97706">引用式回答生成</div>
+        <div class="fn hl" style="color:#d97706">答案可信校验</div>
+        <div class="fn hl" style="color:#d97706">无依据拒答</div>
+        <div class="fn">流式实时输出</div>
+        <div class="fn">思考过程可视化</div>
+        <div class="fn">引用原文溯源</div>
+        <div class="fn">多轮会话管理</div>
+      </div>
+    </div>
+
+    <div class="mod">
+      <div class="mod-head" style="background:#059669">6 系统管理<small>运行保障</small></div>
+      <div class="mod-body">
+        <div class="fn">模型服务配置</div>
+        <div class="fn">配置免重启生效</div>
+        <div class="fn">服务健康监测</div>
+        <div class="fn">调用日志观测</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span><i class="dot" style="background:#2563eb"></i>文档管理 向 知识库构建 供给原料，处理结果回调更新状态</span>
+    <span><i class="dot" style="background:#0891b2"></i>问答业务 内部调用 智能检索 取知识</span>
+    <span><i class="dot" style="background:#059669"></i>系统管理 为各业务提供模型服务与配置</span>
+  </div>
+</body>
+</html>
