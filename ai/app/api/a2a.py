@@ -39,6 +39,30 @@ def _payload(body: dict) -> dict:
     return body.get("params") or body
 
 
+def _retrieval_request(payload: dict) -> tuple[list[str], int, str, dict]:
+    spaces = payload.get("knowledgeSpaceIds")
+    if not isinstance(spaces, list):
+        raise HTTPException(status_code=400, detail="knowledgeSpaceIds must be a list")
+    space_ids: list[str] = []
+    for item in spaces:
+        if not isinstance(item, str) or not item.strip():
+            raise HTTPException(status_code=400, detail="knowledgeSpaceIds must contain strings")
+        space_ids.append(item.strip())
+    constraints = payload.get("constraints") if payload.get("constraints") is not None else {}
+    if not isinstance(constraints, dict):
+        raise HTTPException(status_code=400, detail="constraints must be an object")
+    top_k = constraints.get("topK", 8)
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1 or top_k > 32:
+        raise HTTPException(status_code=400, detail="topK must be between 1 and 32")
+    query = payload.get("query") or ""
+    if space_ids and not isinstance(query, str):
+        raise HTTPException(status_code=400, detail="query must be a string")
+    if space_ids and not str(query).strip():
+        raise HTTPException(status_code=400, detail="query is required")
+    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+    return space_ids, top_k, str(query), context
+
+
 def _claim(caller: str, invocation_id: str, digest: str) -> tuple[str, int | None, str | None, dict | None]:
     """原子占位。返回 (RUN|COMPLETED|IN_PROGRESS|CONFLICT, fencing_token, lease_owner, cached)。"""
     owner = str(uuid.uuid4())
@@ -143,6 +167,7 @@ async def message_send(request: Request, authorization: str | None = Header(defa
     if body.get("method") not in (None, "message/send", "SendMessage"):
         raise HTTPException(status_code=400, detail="only message/send is supported")
     payload = _payload(body)
+    space_ids, top_k, query, context = _retrieval_request(payload)
     invocation_id = str(payload.get("invocationId") or uuid.uuid4())
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False)
     digest = hashlib.sha256(raw.encode()).hexdigest()
@@ -154,15 +179,11 @@ async def message_send(request: Request, authorization: str | None = Header(defa
     if outcome != "RUN" or token is None or owner is None:
         raise HTTPException(status_code=409, detail="IN_PROGRESS")
     try:
-        spaces = payload.get("knowledgeSpaceIds")
-        space_ids = [str(item).strip() for item in spaces if str(item).strip()] if isinstance(spaces, list) else []
         if not space_ids:
             result = {"schemaVersion": "knowledge-retrieval-result-v1", "invocationId": invocation_id, "results": []}
         else:
-            context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
-            top_k = int((payload.get("constraints") or {}).get("topK") or 8)
             result = await retrieve(
-                str(payload.get("query") or ""), invocation_id,
+                query, invocation_id,
                 top_k=top_k, knowledge_space_ids=space_ids, context=context,
             )
         result.pop("hops", None)
