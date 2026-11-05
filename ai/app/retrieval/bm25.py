@@ -53,10 +53,23 @@ def _replace(corpus: list[_Entry]) -> None:
 
 
 def rebuild() -> int:
-    """只装载当前可检索版本。返回子块数。"""
+    """Knowledge 模式：只装载当前 READY 版本。返回子块数。"""
     with engine.connect() as conn:
         rows = conn.execute(text(_CURRENT_SQL)).fetchall()
     corpus = [_Entry(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]) for r in rows]
+    with _LOCK:
+        _replace(corpus)
+    return len(corpus)
+
+
+def rebuild_legacy() -> int:
+    """Legacy 模式：只读 doc_chunk，不连接 document 或 document_version。"""
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT id, doc_id, parent_id, content, section_path, page
+            FROM doc_chunk WHERE is_parent = false
+        """)).fetchall()
+    corpus = [_Entry(r[0], r[1], r[2], r[3], r[4], r[5]) for r in rows]
     with _LOCK:
         _replace(corpus)
     return len(corpus)

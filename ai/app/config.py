@@ -71,6 +71,8 @@ class Settings(BaseSettings):
     # ---- 服务 ----
     internal_token: str = "dev-doc-qa-internal-token"
     database_url: str = "postgresql+psycopg://postgres:root123@db:5432/doc_qa"
+    # false 走原 RAG 的 doc_qa。AlertFlow 的 knowledge-agent 设为 true。
+    knowledge_agent_mode: bool = False
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
