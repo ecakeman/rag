@@ -18,9 +18,7 @@ _LEASE_SECONDS = 45
 def _authorized(authorization: str | None) -> str:
     import os
     expected = os.environ.get("KNOWLEDGE_A2A_TOKEN", "")
-    if not expected:
-        return "anonymous"
-    if authorization != f"Bearer {expected}":
+    if not expected or authorization != f"Bearer {expected}":
         raise HTTPException(status_code=401, detail="a2a token rejected")
     return "java-integration"
 
