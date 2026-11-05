@@ -33,6 +33,8 @@ CREATE INDEX IF NOT EXISTS idx_llm_call_msg ON llm_call(message_id);
 CREATE INDEX IF NOT EXISTS idx_llm_call_ts  ON llm_call(ts);
 
 ALTER TABLE doc_chunk ADD COLUMN IF NOT EXISTS document_version_id BIGINT;
+CREATE INDEX IF NOT EXISTS idx_chunk_version ON doc_chunk(document_version_id);
+ALTER TABLE document ADD COLUMN IF NOT EXISTS current_version_id BIGINT;
 
 CREATE TABLE IF NOT EXISTS knowledge_space (
   id TEXT PRIMARY KEY,

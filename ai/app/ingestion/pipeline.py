@@ -27,51 +27,44 @@ def _callback(callback_url: str, payload: dict) -> None:
         log.warning("[ingest] 回调失败(Java 可通过对账补偿): %s", e)
 
 
-def _write_chunks(doc_id: int, chunks: list[Chunk], vectors: list[list[float]]) -> int:
-    """单事务:先删后插(幂等);父块先写拿 id,再写子块带 parent_id。返回子块数。"""
+def _write_chunks(doc_id: int, document_version_id: int, chunks: list[Chunk], vectors: list[list[float]]) -> int:
+    """单事务:只替换这个版本的块。父块先写拿 id,再写子块带 parent_id。返回子块数。"""
     with engine.begin() as conn:
-        conn.execute(text("DELETE FROM doc_chunk WHERE doc_id = :d"), {"d": doc_id})
+        conn.execute(text("DELETE FROM doc_chunk WHERE document_version_id = :v"), {"v": document_version_id})
         parent_ids: dict[int, int] = {}
         for idx, c in enumerate(chunks):
             if not c.is_parent:
                 continue
             row = conn.execute(text("""
-                INSERT INTO doc_chunk (doc_id, parent_id, is_parent, content, embedding,
+                INSERT INTO doc_chunk (doc_id, document_version_id, parent_id, is_parent, content, embedding,
                                        section_path, page, token_count)
-                VALUES (:doc, NULL, true, :content, NULL, :sp, :page, :tc) RETURNING id
-            """), {"doc": doc_id, "content": c.content, "sp": c.section_path,
+                VALUES (:doc, :ver, NULL, true, :content, NULL, :sp, :page, :tc) RETURNING id
+            """), {"doc": doc_id, "ver": document_version_id, "content": c.content, "sp": c.section_path,
                    "page": c.page, "tc": c.token_count}).fetchone()
             parent_ids[idx] = row[0]
 
         child_count = 0
         vec_iter = iter(vectors)
-        children_meta: list[tuple] = []
         for c in chunks:
             if c.is_parent:
                 continue
             vec = next(vec_iter)
             vec_literal = None if not vec else "[" + ",".join(f"{x:.6f}" for x in vec) + "]"
-            row = conn.execute(text("""
-                INSERT INTO doc_chunk (doc_id, parent_id, is_parent, content, embedding,
+            conn.execute(text("""
+                INSERT INTO doc_chunk (doc_id, document_version_id, parent_id, is_parent, content, embedding,
                                        section_path, page, token_count)
-                VALUES (:doc, :pid, false, :content, CAST(:vec AS vector), :sp, :page, :tc)
-                RETURNING id
-            """), {"doc": doc_id, "pid": parent_ids.get(c.parent_index),
+                VALUES (:doc, :ver, :pid, false, :content, CAST(:vec AS vector), :sp, :page, :tc)
+            """), {"doc": doc_id, "ver": document_version_id, "pid": parent_ids.get(c.parent_index),
                    "content": c.content, "vec": vec_literal,
-                   "sp": c.section_path, "page": c.page, "tc": c.token_count}).fetchone()
-            children_meta.append((row[0], doc_id, parent_ids.get(c.parent_index),
-                                  c.content, c.section_path, c.page))
+                   "sp": c.section_path, "page": c.page, "tc": c.token_count})
             child_count += 1
-    # BM25 增量维护(§8.4 粗粒度锁)
     from app.retrieval import bm25
-    bm25.remove_doc(doc_id)
-    for cm in children_meta:
-        bm25.add_chunk(*cm)
+    bm25.remove_version(document_version_id)
     return child_count
 
 
 def run_ingest(doc_id: int, file_path: str, file_name: str, title: str,
-               callback_url: str, embed_fn=None) -> None:
+               callback_url: str, embed_fn=None, *, document_version_id: int) -> None:
     """后台任务主体(§7.2 步骤2)。"""
     try:
         _callback(callback_url, {"docId": doc_id, "status": "PROCESSING"})
@@ -84,7 +77,7 @@ def run_ingest(doc_id: int, file_path: str, file_name: str, title: str,
             vectors = [[] for _ in children]
         else:
             vectors = embed_texts([c.content for c in children], embed_fn=embed_fn)
-        n = _write_chunks(doc_id, chunks, vectors)
+        n = _write_chunks(doc_id, document_version_id, chunks, vectors)
 
         _INGEST_STATE[doc_id] = {"status": "READY", "chunkCount": n}
         _callback(callback_url, {"docId": doc_id, "status": "READY", "chunkCount": n})

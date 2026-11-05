@@ -40,10 +40,15 @@ def claim_once() -> bool:
         import os
         root = Path(os.environ.get("KNOWLEDGE_STORAGE_ROOT", "/data/knowledge"))
         file_path = root / str(version[2])
-        run_ingest(int(version[1]), str(file_path), file_path.name, version[3], callback_url="")
+        run_ingest(int(version[1]), str(file_path), file_path.name, version[3], callback_url="",
+                   document_version_id=int(version[0]))
         with engine.begin() as conn:
             conn.execute(text("UPDATE ingestion_job SET status='READY', lease_until=NULL WHERE id=:id"), {"id": job_id})
             conn.execute(text("UPDATE document_version SET status='READY' WHERE id=:id"), {"id": version_id})
+            conn.execute(text("UPDATE document SET current_version_id=:version WHERE id=:doc"),
+                         {"version": version_id, "doc": int(version[1])})
+        from app.retrieval import bm25
+        bm25.rebuild()
     except Exception as error:
         with engine.begin() as conn:
             conn.execute(text("""
