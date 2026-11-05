@@ -8,7 +8,7 @@ from pathlib import Path
 from sqlalchemy import text
 
 from app.db import engine
-from app.ingestion.pipeline import run_ingest
+from app.ingestion.pipeline import run_knowledge_ingest
 
 
 def claim_once() -> bool:
@@ -40,8 +40,8 @@ def claim_once() -> bool:
         import os
         root = Path(os.environ.get("KNOWLEDGE_STORAGE_ROOT", "/data/knowledge"))
         file_path = root / str(version[2])
-        run_ingest(int(version[1]), str(file_path), file_path.name, version[3], callback_url="",
-                   document_version_id=int(version[0]))
+        run_knowledge_ingest(int(version[1]), str(file_path), file_path.name, version[3],
+                             document_version_id=int(version[0]))
         with engine.begin() as conn:
             conn.execute(text("UPDATE ingestion_job SET status='READY', lease_until=NULL WHERE id=:id"), {"id": job_id})
             conn.execute(text("UPDATE document_version SET status='READY' WHERE id=:id"), {"id": version_id})

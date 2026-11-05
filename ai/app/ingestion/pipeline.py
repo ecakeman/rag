@@ -27,7 +27,56 @@ def _callback(callback_url: str, payload: dict) -> None:
         log.warning("[ingest] 回调失败(Java 可通过对账补偿): %s", e)
 
 
-def _write_chunks(doc_id: int, document_version_id: int, chunks: list[Chunk], vectors: list[list[float]]) -> int:
+def _vectors(chunks: list[Chunk], embed_fn) -> list[list[float]]:
+    children = [c for c in chunks if not c.is_parent]
+    if embed_fn is None and not settings.effective_embed_api_key:
+        return [[] for _ in children]
+    return embed_texts([c.content for c in children], embed_fn=embed_fn)
+
+
+def _write_legacy_chunks(doc_id: int, chunks: list[Chunk], vectors: list[list[float]]) -> int:
+    """按整个文档替换块。旧 /ingest 没有版本号。"""
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM doc_chunk WHERE doc_id = :d"), {"d": doc_id})
+        parent_ids: dict[int, int] = {}
+        for idx, c in enumerate(chunks):
+            if not c.is_parent:
+                continue
+            row = conn.execute(text("""
+                INSERT INTO doc_chunk (doc_id, parent_id, is_parent, content, embedding,
+                                       section_path, page, token_count)
+                VALUES (:doc, NULL, true, :content, NULL, :sp, :page, :tc) RETURNING id
+            """), {"doc": doc_id, "content": c.content, "sp": c.section_path,
+                   "page": c.page, "tc": c.token_count}).fetchone()
+            parent_ids[idx] = row[0]
+        child_count = 0
+        vec_iter = iter(vectors)
+        children_meta: list[tuple] = []
+        for c in chunks:
+            if c.is_parent:
+                continue
+            vec = next(vec_iter)
+            vec_literal = None if not vec else "[" + ",".join(f"{x:.6f}" for x in vec) + "]"
+            row = conn.execute(text("""
+                INSERT INTO doc_chunk (doc_id, parent_id, is_parent, content, embedding,
+                                       section_path, page, token_count)
+                VALUES (:doc, :pid, false, :content, CAST(:vec AS vector), :sp, :page, :tc)
+                RETURNING id
+            """), {"doc": doc_id, "pid": parent_ids.get(c.parent_index),
+                   "content": c.content, "vec": vec_literal,
+                   "sp": c.section_path, "page": c.page, "tc": c.token_count}).fetchone()
+            children_meta.append((row[0], doc_id, parent_ids.get(c.parent_index),
+                                  c.content, c.section_path, c.page))
+            child_count += 1
+    from app.retrieval import bm25
+    bm25.remove_doc(doc_id)
+    for item in children_meta:
+        bm25.add_chunk(*item)
+    return child_count
+
+
+def _write_knowledge_chunks(doc_id: int, document_version_id: int, chunks: list[Chunk],
+                            vectors: list[list[float]]) -> int:
     """单事务:只替换这个版本的块。父块先写拿 id,再写子块带 parent_id。返回子块数。"""
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM doc_chunk WHERE document_version_id = :v"), {"v": document_version_id})
@@ -63,30 +112,36 @@ def _write_chunks(doc_id: int, document_version_id: int, chunks: list[Chunk], ve
     return child_count
 
 
-def run_ingest(doc_id: int, file_path: str, file_name: str, title: str,
-               callback_url: str, embed_fn=None, *, document_version_id: int) -> None:
-    """后台任务主体(§7.2 步骤2)。"""
+def run_legacy_ingest(doc_id: int, file_path: str, file_name: str, title: str,
+                      callback_url: str, embed_fn=None) -> None:
+    """旧 Backend 的 /ingest。按 doc_id 替换块，不使用 document_version_id。"""
     try:
         _callback(callback_url, {"docId": doc_id, "status": "PROCESSING"})
         _INGEST_STATE[doc_id] = {"status": "PROCESSING"}
-
         pages = to_markdown(file_path)
         chunks = build_chunks(pages, title or Path(file_name).stem)
-        children = [c for c in chunks if not c.is_parent]
-        if embed_fn is None and not settings.effective_embed_api_key:
-            vectors = [[] for _ in children]
-        else:
-            vectors = embed_texts([c.content for c in children], embed_fn=embed_fn)
-        n = _write_chunks(doc_id, document_version_id, chunks, vectors)
-
+        n = _write_legacy_chunks(doc_id, chunks, _vectors(chunks, embed_fn))
         _INGEST_STATE[doc_id] = {"status": "READY", "chunkCount": n}
         _callback(callback_url, {"docId": doc_id, "status": "READY", "chunkCount": n})
     except Exception as e:  # noqa: BLE001
         log.error("[ingest] doc %s 失败", doc_id, exc_info=True)
         _INGEST_STATE[doc_id] = {"status": "FAILED", "errorMsg": str(e)}
-        _callback(callback_url, {"docId": doc_id, "status": "FAILED",
-                                 "errorMsg": str(e)[:500]})
+        _callback(callback_url, {"docId": doc_id, "status": "FAILED", "errorMsg": str(e)[:500]})
         raise
+
+
+def run_ingest(doc_id: int, file_path: str, file_name: str, title: str,
+               callback_url: str, embed_fn=None) -> None:
+    """兼容旧调用方的入口。"""
+    run_legacy_ingest(doc_id, file_path, file_name, title, callback_url, embed_fn)
+
+
+def run_knowledge_ingest(doc_id: int, file_path: str, file_name: str, title: str, *,
+                         document_version_id: int) -> None:
+    """版本化摄取。只有 job worker 调用，失败不切换当前版本。"""
+    pages = to_markdown(file_path)
+    chunks = build_chunks(pages, title or Path(file_name).stem)
+    _write_knowledge_chunks(doc_id, document_version_id, chunks, _vectors(chunks, None))
 
 
 def ingest_status(doc_id: int) -> dict:
