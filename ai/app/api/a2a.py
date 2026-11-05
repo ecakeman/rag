@@ -12,6 +12,7 @@ from app.application.retrieval import retrieve
 from app.db import engine
 
 router = APIRouter()
+_LEASE_SECONDS = 45
 
 
 def _authorized(authorization: str | None) -> str:
@@ -38,6 +39,73 @@ def _payload(body: dict) -> dict:
             if isinstance(parsed, dict):
                 return parsed
     return body.get("params") or body
+
+
+def _claim(caller: str, invocation_id: str, digest: str) -> tuple[str, int | None, str | None, dict | None]:
+    """原子占位。返回 (RUN|COMPLETED|IN_PROGRESS|CONFLICT, fencing_token, lease_owner, cached)。"""
+    owner = str(uuid.uuid4())
+    params = {"caller": caller, "id": invocation_id, "hash": digest, "owner": owner, "lease": _LEASE_SECONDS}
+    with engine.begin() as conn:
+        inserted = conn.execute(text("""
+            INSERT INTO knowledge_invocation
+                (caller_id, invocation_id, request_hash, status, lease_owner, lease_until, attempts, fencing_token)
+            VALUES (:caller, :id, :hash, 'RUNNING', :owner, now() + make_interval(secs => :lease), 1, 1)
+            ON CONFLICT (caller_id, invocation_id) DO NOTHING
+            RETURNING fencing_token
+        """), params).fetchone()
+        if inserted:
+            return "RUN", int(inserted[0]), owner, None
+        row = conn.execute(text("""
+            SELECT request_hash, status, result_json,
+                   lease_until IS NOT NULL AND lease_until > now()
+            FROM knowledge_invocation
+            WHERE caller_id=:caller AND invocation_id=:id
+        """), params).fetchone()
+        if row is None:
+            return "IN_PROGRESS", None, None, None
+        if row[0] != digest:
+            return "CONFLICT", None, None, None
+        if row[1] == "COMPLETED" and row[2] is not None:
+            cached = row[2] if isinstance(row[2], dict) else json.loads(row[2])
+            return "COMPLETED", None, None, cached
+        if row[1] == "RUNNING" and row[3]:
+            return "IN_PROGRESS", None, None, None
+        claimed = conn.execute(text("""
+            UPDATE knowledge_invocation
+            SET status='RUNNING', lease_owner=:owner,
+                lease_until=now() + make_interval(secs => :lease),
+                attempts=attempts + 1, fencing_token=fencing_token + 1,
+                result_json=NULL, safe_message=NULL
+            WHERE caller_id=:caller AND invocation_id=:id AND request_hash=:hash
+              AND (
+                status IN ('FAILED', 'TIMED_OUT', 'UNKNOWN')
+                OR (status = 'RUNNING' AND (lease_until IS NULL OR lease_until <= now()))
+                OR (status = 'COMPLETED' AND result_json IS NULL)
+              )
+            RETURNING fencing_token
+        """), params).fetchone()
+        if claimed:
+            return "RUN", int(claimed[0]), owner, None
+    return "IN_PROGRESS", None, None, None
+
+
+def _finish(caller: str, invocation_id: str, token: int, owner: str, status: str,
+            result: dict | None = None, message: str | None = None) -> bool:
+    with engine.begin() as conn:
+        row = conn.execute(text("""
+            UPDATE knowledge_invocation
+            SET status=:status,
+                result_json=CASE WHEN :result IS NULL THEN NULL ELSE CAST(:result AS jsonb) END,
+                safe_message=:msg, lease_until=NULL
+            WHERE caller_id=:caller AND invocation_id=:id
+              AND fencing_token=:token AND lease_owner=:owner
+            RETURNING invocation_id
+        """), {
+            "status": status, "result": None if result is None else json.dumps(result, ensure_ascii=False),
+            "msg": None if message is None else message[:300],
+            "caller": caller, "id": invocation_id, "token": token, "owner": owner,
+        }).fetchone()
+    return row is not None
 
 
 @router.get("/.well-known/agent-card.json")
@@ -80,24 +148,13 @@ async def message_send(request: Request, authorization: str | None = Header(defa
     invocation_id = str(payload.get("invocationId") or uuid.uuid4())
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False)
     digest = hashlib.sha256(raw.encode()).hexdigest()
-    with engine.begin() as conn:
-        row = conn.execute(text("""
-            SELECT request_hash, status, result_json FROM knowledge_invocation
-            WHERE caller_id=:caller AND invocation_id=:id
-        """), {"caller": caller, "id": invocation_id}).fetchone()
-        if row:
-            if row[0] != digest:
-                raise HTTPException(status_code=409, detail="idempotency conflict")
-            if row[1] == "COMPLETED" and row[2]:
-                result = row[2] if isinstance(row[2], dict) else json.loads(row[2])
-                return _message(body, result)
-            if row[1] == "RUNNING":
-                raise HTTPException(status_code=409, detail="IN_PROGRESS")
-        else:
-            conn.execute(text("""
-                INSERT INTO knowledge_invocation (caller_id, invocation_id, request_hash, status)
-                VALUES (:caller, :id, :hash, 'RUNNING')
-            """), {"caller": caller, "id": invocation_id, "hash": digest})
+    outcome, token, owner, cached = _claim(caller, invocation_id, digest)
+    if outcome == "CONFLICT":
+        raise HTTPException(status_code=409, detail="idempotency conflict")
+    if outcome == "COMPLETED":
+        return _message(body, cached or {})
+    if outcome != "RUN" or token is None or owner is None:
+        raise HTTPException(status_code=409, detail="IN_PROGRESS")
     try:
         spaces = payload.get("knowledgeSpaceIds")
         space_ids = [str(item).strip() for item in spaces if str(item).strip()] if isinstance(spaces, list) else []
@@ -112,17 +169,10 @@ async def message_send(request: Request, authorization: str | None = Header(defa
             )
         result.pop("hops", None)
     except Exception as error:
-        with engine.begin() as conn:
-            conn.execute(text("""
-                UPDATE knowledge_invocation SET status='FAILED', safe_message=:msg
-                WHERE caller_id=:caller AND invocation_id=:id
-            """), {"msg": str(error)[:300], "caller": caller, "id": invocation_id})
+        _finish(caller, invocation_id, token, owner, "FAILED", message=str(error))
         raise HTTPException(status_code=502, detail="retrieval failed") from error
-    with engine.begin() as conn:
-        conn.execute(text("""
-            UPDATE knowledge_invocation SET status='COMPLETED', result_json=CAST(:result AS jsonb)
-            WHERE caller_id=:caller AND invocation_id=:id
-        """), {"result": json.dumps(result, ensure_ascii=False), "caller": caller, "id": invocation_id})
+    if not _finish(caller, invocation_id, token, owner, "COMPLETED", result=result):
+        raise HTTPException(status_code=409, detail="IN_PROGRESS")
     return _message(body, result)
 
 

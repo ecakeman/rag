@@ -78,6 +78,10 @@ CREATE TABLE IF NOT EXISTS knowledge_invocation (
   safe_message TEXT,
   PRIMARY KEY (caller_id, invocation_id)
 );
+ALTER TABLE knowledge_invocation ADD COLUMN IF NOT EXISTS lease_owner TEXT;
+ALTER TABLE knowledge_invocation ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
+ALTER TABLE knowledge_invocation ADD COLUMN IF NOT EXISTS attempts INT NOT NULL DEFAULT 0;
+ALTER TABLE knowledge_invocation ADD COLUMN IF NOT EXISTS fencing_token BIGINT NOT NULL DEFAULT 0;
 
 -- 系统设置页的运行时配置覆盖(DESIGN §13)
 CREATE TABLE IF NOT EXISTS system_config (
