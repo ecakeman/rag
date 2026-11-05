@@ -29,7 +29,8 @@ def rrf_fuse(legs: list[list[Hit]], *, top_k: int | None = None) -> list[Hit]:
     for cid, s in ranked:
         h = best[cid]
         out.append(Hit(h.chunk_id, h.doc_id, h.parent_id, h.content,
-                       h.section_path, h.page, round(s, 6), "rrf"))
+                       h.section_path, h.page, round(s, 6), "rrf",
+                       h.document_version_id, h.title, h.knowledge_space_id))
     return out
 
 
@@ -68,7 +69,8 @@ def rerank(query: str, hits: list[Hit], *, top_n: int | None = None,
             seen[idx] = score
         reranked = [Hit(hits[i].chunk_id, hits[i].doc_id, hits[i].parent_id,
                         hits[i].content, hits[i].section_path, hits[i].page,
-                        round(float(s), 4), "rerank")
+                        round(float(s), 4), "rerank",
+                        hits[i].document_version_id, hits[i].title, hits[i].knowledge_space_id)
                     for i, s in sorted(seen.items(), key=lambda kv: kv[1], reverse=True)]
         write_llm_call(node="rerank", model=cfg("rerank.model", settings.rerank_model),
                        prompt_pack=settings.prompt_pack,

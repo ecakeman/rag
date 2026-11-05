@@ -19,6 +19,9 @@ class Hit:
     page: int | None
     score: float
     leg: str  # "vector" | "bm25"
+    document_version_id: int | None = None
+    title: str | None = None
+    knowledge_space_id: str | None = None
 
 
 def _vec_literal(vec: list[float]) -> str:
@@ -46,6 +49,7 @@ def vector_search(query_vec: list[float], *, top_k: int | None = None,
     else:
         sql = text(f"""
             SELECT c.id, c.doc_id, c.parent_id, c.content, c.section_path, c.page,
+                   c.document_version_id, d.title, d.space_id,
                    1 - (c.embedding <=> CAST(:qvec AS vector)) AS score
             FROM doc_chunk c
             JOIN document d ON d.id = c.doc_id
@@ -64,7 +68,9 @@ def vector_search(query_vec: list[float], *, top_k: int | None = None,
         params["docids"] = doc_ids
     with engine.connect() as conn:
         rows = conn.execute(sql, params).fetchall()
-    return [Hit(r[0], r[1], r[2], r[3], r[4], r[5], round(float(r[6]), 4), "vector")
+    if knowledge_space_ids is None:
+        return [Hit(r[0], r[1], r[2], r[3], r[4], r[5], round(float(r[6]), 4), "vector") for r in rows]
+    return [Hit(r[0], r[1], r[2], r[3], r[4], r[5], round(float(r[9]), 4), "vector", r[6], r[7], r[8])
             for r in rows]
 
 

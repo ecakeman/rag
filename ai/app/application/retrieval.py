@@ -27,13 +27,19 @@ def composed_query(query: str, context: dict | None) -> str:
 def _results(state: dict, invocation_id: str) -> dict:
     hits = state.get("hits") or state.get("candidates") or []
     results = []
-    for rank, hit in enumerate(hits, start=1):
+    for hit in hits:
+        document_id = hit.get("docId")
+        version_id = hit.get("documentVersionId")
+        chunk_id = hit.get("chunkId")
+        title = hit.get("title")
+        if document_id in (None, "") or version_id in (None, "") or chunk_id in (None, "") or not title:
+            continue
         results.append({
-            "rank": rank,
-            "documentId": str(hit.get("docId") or ""),
-            "documentVersionId": str(hit.get("documentVersionId") or "1"),
-            "chunkId": str(hit.get("chunkId") or ""),
-            "title": (hit.get("sectionPath") or "").split(" > ")[0],
+            "rank": len(results) + 1,
+            "documentId": str(document_id),
+            "documentVersionId": str(version_id),
+            "chunkId": str(chunk_id),
+            "title": title,
             "sectionPath": hit.get("sectionPath") or "",
             "page": hit.get("page"),
             "content": hit.get("content") or "",

@@ -24,6 +24,7 @@ class _Entry:
     page: int | None
     document_version_id: int | None = None
     knowledge_space_id: str | None = None
+    title: str | None = None
 
 
 _CORPUS: list[_Entry] = []
@@ -31,7 +32,7 @@ _BM25: BM25Okapi | None = None
 
 _CURRENT_SQL = """
     SELECT c.id, c.doc_id, c.parent_id, c.content, c.section_path, c.page,
-           c.document_version_id, d.space_id
+           c.document_version_id, d.space_id, d.title
     FROM doc_chunk c
     JOIN document d ON d.id = c.doc_id
     JOIN document_version dv ON dv.id = c.document_version_id
@@ -55,7 +56,7 @@ def rebuild() -> int:
     """只装载当前可检索版本。返回子块数。"""
     with engine.connect() as conn:
         rows = conn.execute(text(_CURRENT_SQL)).fetchall()
-    corpus = [_Entry(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]) for r in rows]
+    corpus = [_Entry(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]) for r in rows]
     with _LOCK:
         _replace(corpus)
     return len(corpus)
@@ -104,7 +105,8 @@ def search(query: str, *, top_k: int | None = None,
         if allowed is not None and entry.knowledge_space_id not in allowed:
             continue
         out.append(Hit(entry.chunk_id, entry.doc_id, entry.parent_id, entry.content,
-                       entry.section_path, entry.page, round(float(score), 4), "bm25"))
+                       entry.section_path, entry.page, round(float(score), 4), "bm25",
+                       entry.document_version_id, entry.title, entry.knowledge_space_id))
         if len(out) >= k:
             break
     return out
