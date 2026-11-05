@@ -26,20 +26,40 @@ def _vec_literal(vec: list[float]) -> str:
 
 
 def vector_search(query_vec: list[float], *, top_k: int | None = None,
-                  doc_ids: list[int] | None = None) -> list[Hit]:
+                  doc_ids: list[int] | None = None,
+                  knowledge_space_ids: list[str] | None = None) -> list[Hit]:
+    if knowledge_space_ids is not None and not knowledge_space_ids:
+        return []
     k = top_k or settings.top_k_per_leg
-    sql = text("""
-        SELECT id, doc_id, parent_id, content, section_path, page,
-               1 - (embedding <=> CAST(:qvec AS vector)) AS score
-        FROM doc_chunk
-        WHERE embedding IS NOT NULL
-        {docfilter}
-        ORDER BY embedding <=> CAST(:qvec AS vector)
-        LIMIT :k
-    """)
-    docfilter = "AND doc_id = ANY(:docids)" if doc_ids else ""
-    sql = text(str(sql).replace("{docfilter}", docfilter))
-    params: dict = {"qvec": _vec_literal(query_vec), "k": k}
+    docfilter = "AND c.doc_id = ANY(:docids)" if doc_ids else ""
+    if knowledge_space_ids is None:
+        sql = text(f"""
+            SELECT c.id, c.doc_id, c.parent_id, c.content, c.section_path, c.page,
+                   1 - (c.embedding <=> CAST(:qvec AS vector)) AS score
+            FROM doc_chunk c
+            WHERE c.embedding IS NOT NULL
+            {docfilter}
+            ORDER BY c.embedding <=> CAST(:qvec AS vector)
+            LIMIT :k
+        """)
+        params: dict = {"qvec": _vec_literal(query_vec), "k": k}
+    else:
+        sql = text(f"""
+            SELECT c.id, c.doc_id, c.parent_id, c.content, c.section_path, c.page,
+                   1 - (c.embedding <=> CAST(:qvec AS vector)) AS score
+            FROM doc_chunk c
+            JOIN document d ON d.id = c.doc_id
+            JOIN document_version dv ON dv.id = c.document_version_id
+            WHERE c.embedding IS NOT NULL
+              AND c.is_parent = false
+              AND dv.status = 'READY'
+              AND d.current_version_id = dv.id
+              AND d.space_id = ANY(:spaces)
+            {docfilter}
+            ORDER BY c.embedding <=> CAST(:qvec AS vector)
+            LIMIT :k
+        """)
+        params = {"qvec": _vec_literal(query_vec), "k": k, "spaces": knowledge_space_ids}
     if doc_ids:
         params["docids"] = doc_ids
     with engine.connect() as conn:

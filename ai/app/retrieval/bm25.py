@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+from dataclasses import dataclass
 
 import jieba
 from rank_bm25 import BM25Okapi
@@ -11,64 +12,99 @@ from app.db import engine
 from app.retrieval.store import Hit
 
 _LOCK = threading.Lock()
-_CORPUS: list[tuple[int, tuple]] = []  # [(chunk_id, (doc_id,parent_id,content,section,page))]
+
+
+@dataclass
+class _Entry:
+    chunk_id: int
+    doc_id: int
+    parent_id: int | None
+    content: str
+    section_path: str | None
+    page: int | None
+    document_version_id: int | None = None
+    knowledge_space_id: str | None = None
+
+
+_CORPUS: list[_Entry] = []
 _BM25: BM25Okapi | None = None
+
+_CURRENT_SQL = """
+    SELECT c.id, c.doc_id, c.parent_id, c.content, c.section_path, c.page,
+           c.document_version_id, d.space_id
+    FROM doc_chunk c
+    JOIN document d ON d.id = c.doc_id
+    JOIN document_version dv ON dv.id = c.document_version_id
+    WHERE c.is_parent = false
+      AND dv.status = 'READY'
+      AND d.current_version_id = dv.id
+"""
 
 
 def _tokenize(s: str) -> list[str]:
     return [t for t in jieba.lcut(s) if t.strip()]
 
 
-def rebuild() -> int:
-    """全量重建(启动时)。返回子块数。"""
+def _replace(corpus: list[_Entry]) -> None:
     global _CORPUS, _BM25
+    _CORPUS = corpus
+    _BM25 = BM25Okapi([_tokenize(item.content) for item in corpus]) if corpus else None
+
+
+def rebuild() -> int:
+    """只装载当前可检索版本。返回子块数。"""
     with engine.connect() as conn:
-        rows = conn.execute(text("""
-            SELECT id, doc_id, parent_id, content, section_path, page
-            FROM doc_chunk WHERE is_parent = false
-        """)).fetchall()
-    corpus = [(r[0], (r[1], r[2], r[3], r[4], r[5])) for r in rows]
+        rows = conn.execute(text(_CURRENT_SQL)).fetchall()
+    corpus = [_Entry(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]) for r in rows]
     with _LOCK:
-        _CORPUS = corpus
-        _BM25 = BM25Okapi([_tokenize(c[1][2]) for c in corpus]) if corpus else None
+        _replace(corpus)
     return len(corpus)
 
 
 def add_chunk(chunk_id: int, doc_id: int, parent_id: int | None,
-              content: str, section_path: str | None, page: int | None) -> None:
+              content: str, section_path: str | None, page: int | None,
+              document_version_id: int | None = None,
+              knowledge_space_id: str | None = None) -> None:
     """ingest 后增量(粗粒度锁,§8.4)。"""
-    global _BM25
     with _LOCK:
-        _CORPUS.append((chunk_id, (doc_id, parent_id, content, section_path, page)))
-        _BM25 = BM25Okapi([_tokenize(c[1][2]) for c in _CORPUS]) if _CORPUS else None
+        _CORPUS.append(_Entry(chunk_id, doc_id, parent_id, content, section_path, page,
+                              document_version_id, knowledge_space_id))
+        _replace(list(_CORPUS))
 
 
 def remove_doc(doc_id: int) -> None:
-    global _BM25
     with _LOCK:
-        kept = [(cid, data) for cid, data in _CORPUS if data[0] != doc_id]
-        _CORPUS.clear()
-        _CORPUS.extend(kept)
-        _BM25 = BM25Okapi([_tokenize(c[1][2]) for c in _CORPUS]) if _CORPUS else None
+        _replace([item for item in _CORPUS if item.doc_id != doc_id])
+
+
+def remove_version(document_version_id: int) -> None:
+    with _LOCK:
+        _replace([item for item in _CORPUS if item.document_version_id != document_version_id])
 
 
 def search(query: str, *, top_k: int | None = None,
-           doc_ids: list[int] | None = None) -> list[Hit]:
+           doc_ids: list[int] | None = None,
+           knowledge_space_ids: list[str] | None = None) -> list[Hit]:
     from app.config import settings
+    if knowledge_space_ids is not None and not knowledge_space_ids:
+        return []
+    allowed = set(knowledge_space_ids) if knowledge_space_ids is not None else None
     k = top_k or settings.top_k_per_leg
     with _LOCK:
         if not _BM25 or not _CORPUS:
             return []
-        pairs = list(zip(_CORPUS, _BM25.get_scores(_tokenize(query))))
+        pairs = list(zip(list(_CORPUS), _BM25.get_scores(_tokenize(query))))
     scored = sorted(pairs, key=lambda p: p[1], reverse=True)
     out: list[Hit] = []
-    for (cid, data), s in scored:
-        if s == 0:
-            continue  # rank_bm25 对命中全库的词可能给负 IDF 分,保留其相对排序
-        if doc_ids and data[0] not in doc_ids:
+    for entry, score in scored:
+        if score == 0:
             continue
-        out.append(Hit(cid, data[0], data[1], data[2], data[3], data[4],
-                       round(float(s), 4), "bm25"))
+        if doc_ids and entry.doc_id not in doc_ids:
+            continue
+        if allowed is not None and entry.knowledge_space_id not in allowed:
+            continue
+        out.append(Hit(entry.chunk_id, entry.doc_id, entry.parent_id, entry.content,
+                       entry.section_path, entry.page, round(float(score), 4), "bm25"))
         if len(out) >= k:
             break
     return out

@@ -8,8 +8,11 @@ from app.retrieval.store import Hit, fetch_parents, vector_search
 
 
 def retrieve_fused(query: str, *, doc_ids: list[int] | None = None,
-                   embed_fn=None) -> list[Hit]:
-    """双腿召回 + RRF 融合(不含重排)——供 agent 图的 retrieve/rerank 分节点使用(§8.2)。"""
+                   embed_fn=None, knowledge_space_ids: list[str] | None = None,
+                   top_k: int | None = None) -> list[Hit]:
+    """双腿召回 + RRF 融合(不含重排)。传入空的知识空间列表时不检索。"""
+    if knowledge_space_ids is not None and not knowledge_space_ids:
+        return []
     queries = fusion.multi_query_expand(query, llm=_query_llm())
     vec_leg: list[Hit] = []
     if embed_fn is None and not settings.effective_embed_api_key:
@@ -23,13 +26,16 @@ def retrieve_fused(query: str, *, doc_ids: list[int] | None = None,
     else:
         embeddings = (embed_fn or embed_texts)(queries)
     for vec in embeddings:
-        vec_leg.extend(vector_search(vec, doc_ids=doc_ids))
+        vec_leg.extend(vector_search(vec, doc_ids=doc_ids, knowledge_space_ids=knowledge_space_ids))
     seen: set[int] = set()
     vec_leg = [h for h in vec_leg if not (h.chunk_id in seen or seen.add(h.chunk_id))]
     if settings.enable_hybrid:
-        bm25_leg = bm25.search(query, doc_ids=doc_ids)
-        return fusion.rrf_fuse([vec_leg, bm25_leg])
-    return sorted(vec_leg, key=lambda h: h.score, reverse=True)[: settings.fusion_top_k]
+        bm25_leg = bm25.search(query, doc_ids=doc_ids, knowledge_space_ids=knowledge_space_ids)
+        fused = fusion.rrf_fuse([vec_leg, bm25_leg])
+        return fused[:top_k] if top_k else fused
+    ranked = sorted(vec_leg, key=lambda h: h.score, reverse=True)
+    limit = top_k or settings.fusion_top_k
+    return ranked[:limit]
 
 
 def hybrid_search(query: str, *, doc_ids: list[int] | None = None,
