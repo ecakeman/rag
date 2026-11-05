@@ -23,3 +23,6 @@ class AgentState(TypedDict, total=False):
     verified: str               # PASS | FAIL
     verify_retry: bool
     trace_nodes: list[str]      # 节点执行序(测试与 trace 依据)
+    context: dict               # 调用方传入的故障上下文
+    knowledge_space_ids: list[str]
+    top_k: int

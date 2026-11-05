@@ -99,7 +99,17 @@ async def message_send(request: Request, authorization: str | None = Header(defa
                 VALUES (:caller, :id, :hash, 'RUNNING')
             """), {"caller": caller, "id": invocation_id, "hash": digest})
     try:
-        result = await retrieve(str(payload.get("query") or ""), invocation_id, top_k=int((payload.get("constraints") or {}).get("topK") or 8))
+        spaces = payload.get("knowledgeSpaceIds")
+        space_ids = [str(item).strip() for item in spaces if str(item).strip()] if isinstance(spaces, list) else []
+        if not space_ids:
+            result = {"schemaVersion": "knowledge-retrieval-result-v1", "invocationId": invocation_id, "results": []}
+        else:
+            context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+            top_k = int((payload.get("constraints") or {}).get("topK") or 8)
+            result = await retrieve(
+                str(payload.get("query") or ""), invocation_id,
+                top_k=top_k, knowledge_space_ids=space_ids, context=context,
+            )
         result.pop("hops", None)
     except Exception as error:
         with engine.begin() as conn:

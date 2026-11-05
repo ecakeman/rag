@@ -77,28 +77,67 @@ def decompose_node(state: AgentState) -> dict:
     return {"sub_questions": subs, "current_query": subs[0], "hop": 0}
 
 
+def retrieval_query(state: AgentState) -> str:
+    """检索词保留改写结果，并补上尚未出现的故障上下文。"""
+    base = state.get("current_query") or state.get("standalone_query") or state.get("question") or ""
+    ctx = state.get("context") or {}
+    parts = [str(base).strip()]
+    for key in ("serviceName", "episodeSummary"):
+        value = str(ctx.get(key) or "").strip()
+        if value and value not in parts[0]:
+            parts.append(value)
+    facts = ctx.get("knownFacts") or []
+    if isinstance(facts, list):
+        joined = "\n".join(parts)
+        for fact in facts:
+            value = str(fact).strip()
+            if value and value not in joined:
+                parts.append(value)
+                joined = "\n".join(parts)
+    return "\n".join(part for part in parts if part)
+
+
+def _candidate(hit, source: dict | None = None) -> dict:
+    item = {
+        "chunkId": hit.chunk_id, "docId": hit.doc_id, "parentId": hit.parent_id,
+        "content": hit.content, "sectionPath": hit.section_path, "page": hit.page,
+        "score": hit.score,
+    }
+    if getattr(hit, "document_version_id", None):
+        item["documentVersionId"] = hit.document_version_id
+    if getattr(hit, "title", None):
+        item["title"] = hit.title
+    if getattr(hit, "knowledge_space_id", None):
+        item["knowledgeSpaceId"] = hit.knowledge_space_id
+    if source:
+        for key in ("documentVersionId", "title", "knowledgeSpaceId"):
+            if item.get(key) in (None, "") and source.get(key) not in (None, ""):
+                item[key] = source[key]
+    return item
+
+
 def retrieve_node(state: AgentState) -> dict:
     _mark(state, "retrieve")
-    query = state.get("current_query") or state["standalone_query"]
-    hits = get_retrieval()(query)
-    return {"candidates": [
-        {"chunkId": h.chunk_id, "docId": h.doc_id, "parentId": h.parent_id,
-         "content": h.content, "sectionPath": h.section_path, "page": h.page,
-         "score": h.score} for h in hits]}
+    spaces = state.get("knowledge_space_ids") or []
+    hits = get_retrieval()(
+        retrieval_query(state),
+        knowledge_space_ids=spaces,
+        top_k=state.get("top_k") or None,
+    )
+    return {"candidates": [_candidate(hit) for hit in hits]}
 
 
 def rerank_node(state: AgentState) -> dict:
     _mark(state, "rerank")
     from app.retrieval.store import Hit
     from app.retrieval.fusion import rerank as do_rerank
+    incoming = state.get("candidates", [])
     hits = [Hit(c["chunkId"], c["docId"], c["parentId"], c["content"],
                 c["sectionPath"], c["page"], c["score"], "rrf")
-            for c in state.get("candidates", [])]
-    ranked, degraded = do_rerank(state.get("current_query", ""), hits)
-    return {"candidates": [
-        {"chunkId": h.chunk_id, "docId": h.doc_id, "parentId": h.parent_id,
-         "content": h.content, "sectionPath": h.section_path, "page": h.page,
-         "score": h.score} for h in ranked]}
+            for c in incoming]
+    ranked, degraded = do_rerank(retrieval_query(state), hits)
+    by_chunk = {c["chunkId"]: c for c in incoming}
+    return {"candidates": [_candidate(hit, by_chunk.get(hit.chunk_id)) for hit in ranked]}
 
 
 def grade_node(state: AgentState) -> dict:
