@@ -18,7 +18,7 @@ _SUFFIXES = {".md", ".txt", ".pdf", ".html", ".htm", ".docx"}
 
 def _auth(authorization: str | None) -> None:
     expected = os.environ.get("KNOWLEDGE_A2A_TOKEN", "")
-    if expected and authorization != f"Bearer {expected}":
+    if not expected or authorization != f"Bearer {expected}":
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
