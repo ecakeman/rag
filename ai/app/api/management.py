@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
@@ -12,6 +13,7 @@ from app.db import engine
 
 router = APIRouter()
 ROOT = Path(os.environ.get("KNOWLEDGE_STORAGE_ROOT", "/data/knowledge"))
+_SUFFIXES = {".md", ".txt", ".pdf", ".html", ".htm", ".docx"}
 
 
 def _auth(authorization: str | None) -> None:
@@ -20,30 +22,76 @@ def _auth(authorization: str | None) -> None:
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
+def _suffix(filename: str | None) -> str:
+    name = Path(filename or "sample.md").name
+    suffix = Path(name).suffix.lower()
+    if suffix not in _SUFFIXES or "/" in suffix or "\\" in suffix or ".." in name:
+        raise HTTPException(status_code=400, detail="unsupported file suffix")
+    return suffix
+
+
 @router.post("/spaces/{space_id}/documents")
-async def upload(space_id: str, file: UploadFile = File(...), title: str = Form(""), authorization: str | None = Header(default=None)) -> dict:
+async def upload(space_id: str, file: UploadFile = File(...), title: str = Form(""),
+                 document_id: int | None = Form(None),
+                 authorization: str | None = Header(default=None)) -> dict:
     _auth(authorization)
     body = await file.read()
+    if not body:
+        raise HTTPException(status_code=400, detail="empty file")
+    suffix = _suffix(file.filename)
     digest = hashlib.sha256(body).hexdigest()
-    suffix = Path(file.filename or "sample.md").suffix or ".md"
     ROOT.mkdir(parents=True, exist_ok=True)
-    with engine.begin() as conn:
-        conn.execute(text("INSERT INTO knowledge_space (id, name) VALUES (:id, :name) ON CONFLICT (id) DO NOTHING"),
-                     {"id": space_id, "name": space_id})
-        doc_id = conn.execute(text("INSERT INTO document (space_id, title) VALUES (:space, :title) RETURNING id"),
-                              {"space": space_id, "title": title or file.filename or "document"}).scalar_one()
-        version = conn.execute(text("""
-            INSERT INTO document_version (document_id, version, checksum, storage_path, status)
-            VALUES (:doc, 1, :checksum, :path, 'PENDING') RETURNING id
-        """), {"doc": doc_id, "checksum": digest, "path": f"{doc_id}/1{suffix}"}).scalar_one()
-        job_id = conn.execute(text("""
-            INSERT INTO ingestion_job (document_version_id, status)
-            VALUES (:version, 'PENDING') RETURNING id
-        """), {"version": version}).scalar_one()
-    path = ROOT / str(doc_id)
-    path.mkdir(parents=True, exist_ok=True)
-    (path / f"1{suffix}").write_bytes(body)
-    return {"document_id": doc_id, "version_id": version, "job_id": job_id}
+    temporary = ROOT / f".upload-{uuid.uuid4().hex}.tmp"
+    temporary.write_bytes(body)
+    final: Path | None = None
+    moved = False
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                INSERT INTO knowledge_space (id, name) VALUES (:id, :name)
+                ON CONFLICT (id) DO NOTHING
+            """), {"id": space_id, "name": space_id})
+            if document_id is None:
+                doc_id = conn.execute(text("""
+                    INSERT INTO document (space_id, title) VALUES (:space, :title) RETURNING id
+                """), {"space": space_id, "title": title or file.filename or "document"}).scalar_one()
+                version_no = 1
+            else:
+                row = conn.execute(text("""
+                    SELECT id, space_id FROM document WHERE id=:id FOR UPDATE
+                """), {"id": document_id}).fetchone()
+                if row is None or row[1] != space_id:
+                    raise HTTPException(status_code=404, detail="document is not in this space")
+                doc_id = int(row[0])
+                if title:
+                    conn.execute(text("UPDATE document SET title=:title WHERE id=:id"),
+                                 {"title": title, "id": doc_id})
+                version_no = int(conn.execute(text("""
+                    SELECT COALESCE(MAX(version), 0) + 1 FROM document_version WHERE document_id=:id
+                """), {"id": doc_id}).scalar_one())
+            storage = f"{doc_id}/{version_no}{suffix}"
+            final = ROOT / storage
+            final.parent.mkdir(parents=True, exist_ok=True)
+            if final.exists():
+                raise HTTPException(status_code=409, detail="version file already exists")
+            os.replace(temporary, final)
+            moved = True
+            version_id = conn.execute(text("""
+                INSERT INTO document_version (document_id, version, checksum, storage_path, status)
+                VALUES (:doc, :version, :checksum, :path, 'PENDING') RETURNING id
+            """), {"doc": doc_id, "version": version_no, "checksum": digest, "path": storage}).scalar_one()
+            job_id = conn.execute(text("""
+                INSERT INTO ingestion_job (document_version_id, status)
+                VALUES (:version, 'PENDING') RETURNING id
+            """), {"version": version_id}).scalar_one()
+        return {"document_id": doc_id, "version_id": version_id, "version": version_no, "job_id": job_id}
+    except Exception:
+        if moved and final is not None and final.exists():
+            final.unlink()
+        raise
+    finally:
+        if temporary.exists():
+            temporary.unlink()
 
 
 @router.get("/jobs/{job_id}")
