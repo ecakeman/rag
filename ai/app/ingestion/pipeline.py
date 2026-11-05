@@ -15,6 +15,10 @@ from app.ingestion.embedder import embed_texts
 
 log = logging.getLogger(__name__)
 
+
+class LostLease(RuntimeError):
+    """续租失败后，旧 worker 不能再写这个版本。"""
+
 # 进程内摄入状态(对账兜底用;重启后以 DB 为准)
 _INGEST_STATE: dict[int, dict] = {}
 
@@ -76,9 +80,16 @@ def _write_legacy_chunks(doc_id: int, chunks: list[Chunk], vectors: list[list[fl
 
 
 def _write_knowledge_chunks(doc_id: int, document_version_id: int, chunks: list[Chunk],
-                            vectors: list[list[float]]) -> int:
-    """单事务:只替换这个版本的块。父块先写拿 id,再写子块带 parent_id。返回子块数。"""
+                            vectors: list[list[float]], *, job_id: int, lease_owner: str,
+                            fencing_token: int) -> int:
+    """单事务:确认仍持有任务后，只替换这个版本的块。"""
     with engine.begin() as conn:
+        held = conn.execute(text("""
+            SELECT lease_owner, fencing_token, lease_until > now()
+            FROM ingestion_job WHERE id=:id FOR UPDATE
+        """), {"id": job_id}).fetchone()
+        if held is None or held[0] != lease_owner or int(held[1]) != fencing_token or not held[2]:
+            raise LostLease(f"job {job_id} lease lost")
         conn.execute(text("DELETE FROM doc_chunk WHERE document_version_id = :v"), {"v": document_version_id})
         parent_ids: dict[int, int] = {}
         for idx, c in enumerate(chunks):
@@ -107,8 +118,6 @@ def _write_knowledge_chunks(doc_id: int, document_version_id: int, chunks: list[
                    "content": c.content, "vec": vec_literal,
                    "sp": c.section_path, "page": c.page, "tc": c.token_count})
             child_count += 1
-    from app.retrieval import bm25
-    bm25.remove_version(document_version_id)
     return child_count
 
 
@@ -137,11 +146,15 @@ def run_ingest(doc_id: int, file_path: str, file_name: str, title: str,
 
 
 def run_knowledge_ingest(doc_id: int, file_path: str, file_name: str, title: str, *,
-                         document_version_id: int) -> None:
-    """版本化摄取。只有 job worker 调用，失败不切换当前版本。"""
+                         document_version_id: int, job_id: int, lease_owner: str,
+                         fencing_token: int) -> None:
+    """版本化摄取。只有持有租约的 job worker 可以写块。"""
     pages = to_markdown(file_path)
     chunks = build_chunks(pages, title or Path(file_name).stem)
-    _write_knowledge_chunks(doc_id, document_version_id, chunks, _vectors(chunks, None))
+    _write_knowledge_chunks(
+        doc_id, document_version_id, chunks, _vectors(chunks, None),
+        job_id=job_id, lease_owner=lease_owner, fencing_token=fencing_token,
+    )
 
 
 def ingest_status(doc_id: int) -> dict:
