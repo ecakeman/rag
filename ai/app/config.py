@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://postgres:root123@db:5432/doc_qa"
     # false 走原 RAG 的 doc_qa。AlertFlow 的 knowledge-agent 设为 true。
     knowledge_agent_mode: bool = False
+    # 单文件上传上限。超过后拒绝并删除本次临时文件。
+    knowledge_upload_max_bytes: int = 33_554_432
+    # 每次成功领取并开始处理计一次。达到后 Job 和未 READY 的版本改为 FAILED。
+    knowledge_ingest_max_attempts: int = 5
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

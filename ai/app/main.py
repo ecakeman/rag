@@ -33,6 +33,8 @@ async def lifespan(app: FastAPI):
                 n = bm25.rebuild()
                 log.info("[startup] 当前版本 BM25 索引: %d 子块", n)
             except Exception:
+                from app.runtime.jobs import mark_index_dirty
+                mark_index_dirty()
                 log.warning("[startup] knowledge BM25 重建失败", exc_info=True)
             try:
                 from app.runtime.jobs import start

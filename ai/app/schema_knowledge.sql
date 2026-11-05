@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS ingestion_job (
   id BIGSERIAL PRIMARY KEY,
   document_version_id BIGINT NOT NULL,
   status TEXT NOT NULL,
+  -- attempts：每次成功领取并开始处理时加一。上限来自 KNOWLEDGE_INGEST_MAX_ATTEMPTS，默认 5。
   attempts INT NOT NULL DEFAULT 0,
   lease_owner TEXT,
   lease_until TIMESTAMPTZ,

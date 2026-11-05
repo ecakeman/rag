@@ -9,11 +9,13 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from sqlalchemy import text
 
+from app.config import settings
 from app.db import engine
 
 router = APIRouter()
 ROOT = Path(os.environ.get("KNOWLEDGE_STORAGE_ROOT", "/data/knowledge"))
 _SUFFIXES = {".md", ".txt", ".pdf", ".html", ".htm", ".docx"}
+_CHUNK = 1024 * 1024
 
 
 def _auth(authorization: str | None) -> None:
@@ -35,17 +37,27 @@ async def upload(space_id: str, file: UploadFile = File(...), title: str = Form(
                  document_id: int | None = Form(None),
                  authorization: str | None = Header(default=None)) -> dict:
     _auth(authorization)
-    body = await file.read()
-    if not body:
-        raise HTTPException(status_code=400, detail="empty file")
     suffix = _suffix(file.filename)
-    digest = hashlib.sha256(body).hexdigest()
     ROOT.mkdir(parents=True, exist_ok=True)
     temporary = ROOT / f".upload-{uuid.uuid4().hex}.tmp"
-    temporary.write_bytes(body)
+    digest = hashlib.sha256()
+    total = 0
     final: Path | None = None
     moved = False
     try:
+        with temporary.open("wb") as out:
+            while True:
+                chunk = await file.read(_CHUNK)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > settings.knowledge_upload_max_bytes:
+                    raise HTTPException(status_code=413, detail="file exceeds upload limit")
+                digest.update(chunk)
+                out.write(chunk)
+        if total == 0:
+            raise HTTPException(status_code=400, detail="empty file")
+        checksum = digest.hexdigest()
         with engine.begin() as conn:
             conn.execute(text("""
                 INSERT INTO knowledge_space (id, name) VALUES (:id, :name)
@@ -79,7 +91,7 @@ async def upload(space_id: str, file: UploadFile = File(...), title: str = Form(
             version_id = conn.execute(text("""
                 INSERT INTO document_version (document_id, version, checksum, storage_path, status)
                 VALUES (:doc, :version, :checksum, :path, 'PENDING') RETURNING id
-            """), {"doc": doc_id, "version": version_no, "checksum": digest, "path": storage}).scalar_one()
+            """), {"doc": doc_id, "version": version_no, "checksum": checksum, "path": storage}).scalar_one()
             job_id = conn.execute(text("""
                 INSERT INTO ingestion_job (document_version_id, status)
                 VALUES (:version, 'PENDING') RETURNING id
