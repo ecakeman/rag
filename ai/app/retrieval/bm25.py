@@ -25,7 +25,7 @@ def rebuild() -> int:
     with engine.connect() as conn:
         rows = conn.execute(text("""
             SELECT id, doc_id, parent_id, content, section_path, page
-            FROM doc_chunk WHERE embedding IS NOT NULL
+            FROM doc_chunk WHERE is_parent = false
         """)).fetchall()
     corpus = [(r[0], (r[1], r[2], r[3], r[4], r[5])) for r in rows]
     with _LOCK:

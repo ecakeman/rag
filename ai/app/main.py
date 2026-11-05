@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import chat, ingest, search
+from app.api import a2a, chat, ingest, management, search
 from app.db import init_db
 from app.retrieval import bm25
 
@@ -29,6 +29,16 @@ async def lifespan(app: FastAPI):
             log.info("[startup] BM25 索引重建完成: %d 子块", n)
     except Exception:  # noqa: BLE001
         log.warning("[startup] BM25 重建失败(空库首次启动属正常)", exc_info=True)
+    try:
+        from app.runtime.jobs import start
+        start()
+    except Exception:  # noqa: BLE001
+        log.warning("[startup] 摄取扫描未启动", exc_info=True)
+    try:
+        from app.runtime.mcp_probe import probe
+        probe()
+    except Exception:  # noqa: BLE001
+        log.warning("[startup] MCP 目录探测失败，进程继续启动", exc_info=True)
     yield
 
 
@@ -36,6 +46,8 @@ app = FastAPI(title="enterprise-doc-qa AI service", lifespan=lifespan)
 app.include_router(ingest.router)
 app.include_router(search.router)
 app.include_router(chat.router)
+app.include_router(a2a.router)
+app.include_router(management.router)
 
 
 @app.get("/health")

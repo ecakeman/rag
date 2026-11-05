@@ -10,9 +10,18 @@ from app.retrieval.store import Hit, fetch_parents, vector_search
 def retrieve_fused(query: str, *, doc_ids: list[int] | None = None,
                    embed_fn=None) -> list[Hit]:
     """双腿召回 + RRF 融合(不含重排)——供 agent 图的 retrieve/rerank 分节点使用(§8.2)。"""
-    queries = fusion.multi_query_expand(query)
+    queries = fusion.multi_query_expand(query, llm=_query_llm())
     vec_leg: list[Hit] = []
-    embeddings = (embed_fn or embed_texts)(queries)
+    if embed_fn is None and not settings.effective_embed_api_key:
+        try:
+            from app.observe.llm_log import write_llm_call
+            write_llm_call(node="embed", model=settings.embed_model, latency_ms=0,
+                           status="degraded", error_snippet="embed api key missing")
+        except Exception:  # noqa: BLE001
+            pass
+        embeddings = []
+    else:
+        embeddings = (embed_fn or embed_texts)(queries)
     for vec in embeddings:
         vec_leg.extend(vector_search(vec, doc_ids=doc_ids))
     seen: set[int] = set()
@@ -29,6 +38,20 @@ def hybrid_search(query: str, *, doc_ids: list[int] | None = None,
     fused = retrieve_fused(query, doc_ids=doc_ids, embed_fn=embed_fn)
     ranked, _degraded = fusion.rerank(query, fused)
     return ranked
+
+
+def _query_llm():
+    if not settings.llm_api_key or not settings.enable_multiquery:
+        return None
+
+    def expand(query: str, n: int) -> list[str]:
+        from app.agent.llm import fast_llm
+        raw = fast_llm().call(
+            [{"role": "user", "content": f"给出{n}个检索变体，每行一个，不要解释：{query}"}],
+            node="multi_query", prompt_id="multi_query", json_mode=False)
+        return [line.strip() for line in raw.splitlines() if line.strip()]
+
+    return expand
 
 
 def hits_with_parents(hits: list[Hit]) -> list[dict]:

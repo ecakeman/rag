@@ -18,7 +18,12 @@ def init_db() -> None:
     """幂等执行 schema.sql;vector 维度按 EMBED_DIM 模板替换(§4.3/§7.1)。"""
     ddl = SCHEMA_PATH.read_text(encoding="utf-8")
     ddl = ddl.replace("__EMBED_DIM__", str(settings.embed_dim))
-    with engine.begin() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
         for stmt in [s.strip() for s in ddl.split(";") if s.strip() and not s.strip().startswith("--")]:
             conn.execute(text(stmt))
+            conn.commit()

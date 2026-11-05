@@ -77,6 +77,44 @@ def build_graph(emit=None):
     return g.compile()
 
 
+def _router_without_model(state: AgentState) -> dict:
+    return {"qtype": "SIMPLE", "hop": 0, "hits": [], "new_hit_count": 0,
+            "standalone_query": state.get("standalone_query") or state.get("question"),
+            "current_query": state.get("current_query") or state.get("question")}
+
+
+def _grade_without_model(state: AgentState) -> dict:
+    candidates = state.get("candidates") or []
+    return {"hits": candidates, "new_hit_count": len(candidates), "verdict": "ENOUGH"}
+
+
+def build_retrieval_graph():
+    """只跑检索节点。没有模型密钥时不调用 LLM，也不生成回答。"""
+    from app.config import settings
+    g = StateGraph(AgentState)
+    g.add_node("rewrite", nodes.rewrite_node)
+    g.add_node("router", nodes.router_node if settings.llm_api_key else _router_without_model)
+    g.add_node("decompose", nodes.decompose_node)
+    g.add_node("retrieve", nodes.retrieve_node)
+    g.add_node("rerank", nodes.rerank_node)
+    g.add_node("grade", nodes.grade_node if settings.llm_api_key else _grade_without_model)
+    g.add_node("sufficiency", nodes.sufficiency_node)
+    g.add_node("collect", lambda state: state)
+    g.set_entry_point("rewrite")
+    g.add_edge("rewrite", "router")
+    g.add_conditional_edges("router", _after_router,
+                            {"chitchat": "collect", "complex": "decompose", "simple": "retrieve"})
+    g.add_edge("decompose", "retrieve")
+    g.add_edge("retrieve", "rerank")
+    g.add_edge("rerank", "grade")
+    g.add_conditional_edges("grade", _after_grade,
+                            {"complex": "sufficiency", "simple": "collect"})
+    g.add_conditional_edges("sufficiency", _after_sufficiency,
+                            {"more": "retrieve", "done": "collect"})
+    g.add_edge("collect", END)
+    return g.compile()
+
+
 _GRAPH_CACHE: dict = {}
 
 

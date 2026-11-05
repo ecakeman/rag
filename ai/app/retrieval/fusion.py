@@ -38,11 +38,17 @@ def multi_query_expand(query: str, *, llm=None) -> list[str]:
     if not settings.enable_multiquery:
         return [query]
     if llm is None:
+        write_llm_call(node="multi_query", model=cfg("llm.fast_model", settings.llm_fast_model),
+                       prompt_pack=settings.prompt_pack, latency_ms=0, status="degraded",
+                       error_snippet="llm not injected")
         return [query]
     try:
         variants = llm(query, settings.multi_query_n)
         return [query] + list(variants)[: settings.multi_query_n]
-    except Exception:  # noqa: BLE001
+    except Exception as error:  # noqa: BLE001
+        write_llm_call(node="multi_query", model=cfg("llm.fast_model", settings.llm_fast_model),
+                       prompt_pack=settings.prompt_pack, latency_ms=0, status="degraded",
+                       error_snippet=str(error)[:200])
         return [query]
 
 

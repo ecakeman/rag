@@ -55,7 +55,17 @@ def run_one(row: dict, judge: LlmService | None, synth=None) -> dict:
                promptPack=settings.prompt_pack,
                hops=1 if not settings.enable_agent else "")
     try:
-        hits = hybrid_search(row["question"])
+        if settings.enable_agent:
+            from app.application.retrieval import retrieve_documents
+            found = retrieve_documents(row["question"], invocation_id=f"eval-{row['id']}")
+            out["hops"] = found.get("hops", 1)
+            out["answer"] = "\n".join(item["content"] for item in found["results"])[:2000]
+            class _Hit:
+                def __init__(self, item):
+                    self.section_path = item.get("sectionPath")
+            hits = [_Hit(item) for item in found["results"]]
+        else:
+            hits = hybrid_search(row["question"])
         expect_docs = [d.strip() for d in row["docs"].split("|")]
         hit_titles = {(h.section_path or "").split(" > ")[0] for h in hits}
         out["retrievalHit"] = int(bool(hits) and any(

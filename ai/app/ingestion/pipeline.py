@@ -50,7 +50,7 @@ def _write_chunks(doc_id: int, chunks: list[Chunk], vectors: list[list[float]]) 
             if c.is_parent:
                 continue
             vec = next(vec_iter)
-            vec_literal = "[" + ",".join(f"{x:.6f}" for x in vec) + "]"
+            vec_literal = None if not vec else "[" + ",".join(f"{x:.6f}" for x in vec) + "]"
             row = conn.execute(text("""
                 INSERT INTO doc_chunk (doc_id, parent_id, is_parent, content, embedding,
                                        section_path, page, token_count)
@@ -80,7 +80,10 @@ def run_ingest(doc_id: int, file_path: str, file_name: str, title: str,
         pages = to_markdown(file_path)
         chunks = build_chunks(pages, title or Path(file_name).stem)
         children = [c for c in chunks if not c.is_parent]
-        vectors = embed_texts([c.content for c in children], embed_fn=embed_fn)
+        if embed_fn is None and not settings.effective_embed_api_key:
+            vectors = [[] for _ in children]
+        else:
+            vectors = embed_texts([c.content for c in children], embed_fn=embed_fn)
         n = _write_chunks(doc_id, chunks, vectors)
 
         _INGEST_STATE[doc_id] = {"status": "READY", "chunkCount": n}
@@ -90,6 +93,7 @@ def run_ingest(doc_id: int, file_path: str, file_name: str, title: str,
         _INGEST_STATE[doc_id] = {"status": "FAILED", "errorMsg": str(e)}
         _callback(callback_url, {"docId": doc_id, "status": "FAILED",
                                  "errorMsg": str(e)[:500]})
+        raise
 
 
 def ingest_status(doc_id: int) -> dict:
