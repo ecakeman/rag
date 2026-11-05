@@ -22,7 +22,7 @@ AlertFlow 把 `KNOWLEDGE_AGENT_MODE=true`，并使用单独的 `knowledge` 数�
 - Schema 初始化失败时 `/health` 返回 503。
 - 检索只返回原文片段和来源。不生成回答、摘要或诊断结论。
 
-上传可以不带 `document_id`，这时创建文档和版本 1。带上已有文档时，该文档必须属于当前空间，版本号在锁行后递增。文件按 1MiB 分块写入临时路径，同时计算 SHA-256。`KNOWLEDGE_UPLOAD_MAX_BYTES` 默认 33554432，超过后返回 413 并删除临时文件。数据库事务失败会删除这次的最终文件。摄取成功之后才把 `current_version_id` 指到新版本。
+上传可以不带 `document_id`，这时创建文档和版本 1。带上已有文档时，该文档必须属于当前空间，版本号在锁行后递增。文件按 1MiB 分块写入临时路径，同时计算 SHA-256。`KNOWLEDGE_UPLOAD_MAX_BYTES` 默认 33554432，必须是正数，超过后返回 413 并删除临时文件。`KNOWLEDGE_INGEST_MAX_ATTEMPTS` 默认 5。这两个值必须是正数，否则进程在加载配置时失败。数据库事务失败会删除这次的最终文件。摄取成功之后才把 `current_version_id` 指到新版本。
 
 超过 24 小时、且 `document_version.storage_path` 没有引用的上传文件，由摄取循环清理。清理只看 `KNOWLEDGE_STORAGE_ROOT`。
 
