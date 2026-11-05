@@ -1,6 +1,7 @@
 """非流式 A2A message/send。一次请求返回完整检索结果。"""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import uuid
@@ -63,10 +64,25 @@ def _retrieval_request(payload: dict) -> tuple[list[str], int, str, dict]:
     return space_ids, top_k, str(query), context
 
 
-def _claim(caller: str, invocation_id: str, digest: str) -> tuple[str, int | None, str | None, dict | None]:
+def _limits(request: Request) -> tuple[int, int]:
+    """返回 (请求截止秒数, 租约秒数)。没有头时两者都是 45 秒。"""
+    raw = request.headers.get("x-knowledge-timeout-ms")
+    if raw is None or raw == "":
+        return _LEASE_SECONDS, _LEASE_SECONDS
+    try:
+        millis = int(raw)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail="timeout header is invalid") from error
+    if millis < 1000:
+        raise HTTPException(status_code=400, detail="timeout header is invalid")
+    request_seconds = max(1, millis // 1000)
+    return request_seconds, max(_LEASE_SECONDS, request_seconds + 15)
+
+
+def _claim(caller: str, invocation_id: str, digest: str, lease_seconds: int) -> tuple[str, int | None, str | None, dict | None]:
     """原子占位。返回 (RUN|COMPLETED|IN_PROGRESS|CONFLICT, fencing_token, lease_owner, cached)。"""
     owner = str(uuid.uuid4())
-    params = {"caller": caller, "id": invocation_id, "hash": digest, "owner": owner, "lease": _LEASE_SECONDS}
+    params = {"caller": caller, "id": invocation_id, "hash": digest, "owner": owner, "lease": lease_seconds}
     with engine.begin() as conn:
         inserted = conn.execute(text("""
             INSERT INTO knowledge_invocation
@@ -168,10 +184,11 @@ async def message_send(request: Request, authorization: str | None = Header(defa
         raise HTTPException(status_code=400, detail="only message/send is supported")
     payload = _payload(body)
     space_ids, top_k, query, context = _retrieval_request(payload)
+    request_seconds, lease_seconds = _limits(request)
     invocation_id = str(payload.get("invocationId") or uuid.uuid4())
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False)
     digest = hashlib.sha256(raw.encode()).hexdigest()
-    outcome, token, owner, cached = _claim(caller, invocation_id, digest)
+    outcome, token, owner, cached = _claim(caller, invocation_id, digest, lease_seconds)
     if outcome == "CONFLICT":
         raise HTTPException(status_code=409, detail="idempotency conflict")
     if outcome == "COMPLETED":
@@ -182,11 +199,14 @@ async def message_send(request: Request, authorization: str | None = Header(defa
         if not space_ids:
             result = {"schemaVersion": "knowledge-retrieval-result-v1", "invocationId": invocation_id, "results": []}
         else:
-            result = await retrieve(
+            result = await asyncio.wait_for(retrieve(
                 query, invocation_id,
                 top_k=top_k, knowledge_space_ids=space_ids, context=context,
-            )
+            ), timeout=request_seconds)
         result.pop("hops", None)
+    except asyncio.TimeoutError as error:
+        _finish(caller, invocation_id, token, owner, "TIMED_OUT", message="retrieval timed out")
+        raise HTTPException(status_code=504, detail="retrieval timed out") from error
     except Exception as error:
         _finish(caller, invocation_id, token, owner, "FAILED", message=str(error))
         raise HTTPException(status_code=502, detail="retrieval failed") from error
